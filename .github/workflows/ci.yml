@@ -87,6 +87,42 @@ jobs:
       run: make test
     - name: Test it (advanced)
       run: make test-advanced
+  build-slim:
+    name: Slim (${{ matrix.label }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: no-wasm
+            flags: -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_WASM=OFF
+          - label: no-sqlite
+            flags: -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_SQLITE=OFF
+          - label: no-tls
+            flags: -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_TLS=OFF
+          - label: minimal
+            flags: -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_WITH_WASM=OFF -DBUILD_WITH_SQLITE=OFF -DBUILD_WITH_TLS=OFF -DBUILD_WITH_STRIP=ON -DBUILD_WITH_LTO=ON
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        submodules: recursive
+    - uses: actions/setup-node@v6
+      with:
+        node-version-file: '.nvmrc'
+    - name: Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y libffi-dev
+    - name: Build it
+      run: |
+        cmake -B build ${{ matrix.flags }}
+        cmake --build build -j $(getconf _NPROCESSORS_ONLN)
+    - name: Binary size
+      run: ls -lh build/tjs | awk '{ print $5, $NF }'
+    - name: Download esbuild
+      run: ./build/tjs bundle tests/helpers/bundle-input.js /tmp/warm.js && rm -f /tmp/warm.js
+    - name: Test it
+      run: ./build/tjs test tests/
   build-macos:
     name: macOS (${{ matrix.buildType }}, ${{ matrix.os }}, mimalloc=${{ matrix.mimalloc }})
     runs-on: ${{ matrix.os }}
