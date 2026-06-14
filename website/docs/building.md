@@ -122,12 +122,15 @@ cmake --build build-slim
 These flags shrink the binary **without removing any feature** — they only change how the
 code is compiled and linked. They are independent of one another and can be combined.
 
-| CMake option                | Default | Effect                                              |
-|-----------------------------|---------|-----------------------------------------------------|
-| `BUILD_WITH_STRIP=ON`       | OFF     | Strip the symbol table from the binary after linking |
-| `BUILD_WITH_LTO=ON`         | OFF     | Enable link-time optimization (smaller/faster code, slower link) |
-| `BUILD_WITH_GC_SECTIONS=ON` | OFF     | Per-function/data sections plus linker dead-code stripping |
-| `BUILDTYPE=MinSizeRel`      | —       | Standard CMake build type that optimizes for size (`-Os`) |
+| CMake option                      | Default | Effect                                              |
+|-----------------------------------|---------|-----------------------------------------------------|
+| `BUILD_WITH_STRIP=ON`             | OFF     | Strip the symbol table from the binary after linking |
+| `BUILD_WITH_LTO=ON`               | OFF     | Enable link-time optimization (smaller/faster code, slower link) |
+| `BUILD_WITH_GC_SECTIONS=ON`       | OFF     | Per-function/data sections plus linker dead-code stripping |
+| `BUILD_WITH_OZ=ON`                | OFF     | Use Clang's `-Oz` (more aggressive than `-Os`) in MinSizeRel builds |
+| `BUILD_WITH_HIDDEN_VISIBILITY=ON` | OFF     | Compile with `-fvisibility=hidden` so the linker/LTO can prune more |
+| `BUILD_WITH_ICF=ON`               | OFF     | Identical-code folding at link (lld/gold; ELF only) |
+| `BUILDTYPE=MinSizeRel`            | —       | Standard CMake build type that optimizes for size (`-Os`) |
 
 Notes:
 
@@ -137,9 +140,23 @@ Notes:
   interprocedural optimization.
 - `BUILD_WITH_GC_SECTIONS` maps to `-Wl,--gc-sections` (GNU/lld), `-Wl,-dead_strip` (Apple), or
   `/OPT:REF /OPT:ICF` (MSVC).
+- `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
+  MinSizeRel flags). Under GCC it warns and keeps `-Os`. `-Oz` can slow hot paths.
+- `BUILD_WITH_HIDDEN_VISIBILITY` hides non-exported symbols (`-fvisibility-inlines-hidden` is added
+  for C++). FFI `dlopen` and SQLite loadable extensions are unaffected (loaded modules are
+  self-contained).
+- `BUILD_WITH_ICF` needs lld or gold and folds at `--icf=safe`. It is skipped on Apple ld64 (which
+  has no `--icf`, but already gets `-Wl,-dead_strip` from `BUILD_WITH_GC_SECTIONS`) and on MSVC
+  (which folds via `/OPT:ICF`).
 - `BUILDTYPE=MinSizeRel` needs no extra flag; it is a standard CMake build type.
 
-Unix/macOS example combining all four:
+:::warning[Experimental]
+`BUILD_WITH_NO_UNWIND_TABLES=ON` drops the async unwind / `.eh_frame` tables used for crash and
+signal backtraces. C++ exception unwinding still works, but crash backtraces will be unusable.
+It is off by default; verify your signal/error paths before enabling it.
+:::
+
+Unix/macOS example combining the portable flags:
 
 ```bash
 BUILD_WITH_STRIP=ON BUILD_WITH_LTO=ON BUILD_WITH_GC_SECTIONS=ON BUILDTYPE=MinSizeRel make
@@ -151,6 +168,16 @@ Direct CMake example:
 cmake -B build-min -DCMAKE_BUILD_TYPE=MinSizeRel \
   -DBUILD_WITH_STRIP=ON -DBUILD_WITH_LTO=ON -DBUILD_WITH_GC_SECTIONS=ON
 cmake --build build-min
+```
+
+Maximum size optimization with every feature kept (Clang toolchain; on Linux add
+`-DBUILD_WITH_ICF=ON` with lld/gold):
+
+```bash
+cmake -B build-maxopt -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_STRIP=ON -DBUILD_WITH_LTO=ON -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_OZ=ON -DBUILD_WITH_HIDDEN_VISIBILITY=ON
+cmake --build build-maxopt
 ```
 
 ## Customizing the build

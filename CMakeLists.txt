@@ -107,6 +107,19 @@ if(BUILD_WITH_LTO)
     endif()
 endif()
 
+# -Oz does strictly more size work than -Os, but is Clang-only. Rewrite only the
+# *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
+xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
+if(BUILD_WITH_OZ)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        string(REPLACE "-Os" "-Oz" CMAKE_C_FLAGS_MINSIZEREL   "${CMAKE_C_FLAGS_MINSIZEREL}")
+        string(REPLACE "-Os" "-Oz" CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL}")
+        message(STATUS "Using -Oz for MinSizeRel")
+    else()
+        message(WARNING "BUILD_WITH_OZ requested but compiler is not Clang; keeping -Os")
+    endif()
+endif()
+
 xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections and link with dead-code stripping" OFF)
 if(BUILD_WITH_GC_SECTIONS)
     if(MSVC)
@@ -114,6 +127,26 @@ if(BUILD_WITH_GC_SECTIONS)
     else()
         add_compile_options(-ffunction-sections -fdata-sections)
     endif()
+endif()
+
+# Hidden default visibility lets the linker/LTO prune harder and shrinks the
+# dynamic symbol table. -fvisibility-inlines-hidden is C++-only, so gate it with
+# a generator expression to avoid -Wunused-command-line-argument on C TUs.
+# Placed before any add_library/add_subdirectory so it also covers vendored deps.
+xoption(BUILD_WITH_HIDDEN_VISIBILITY "If ON, compile with -fvisibility=hidden" OFF)
+if(BUILD_WITH_HIDDEN_VISIBILITY AND NOT MSVC)
+    add_compile_options(-fvisibility=hidden)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fvisibility-inlines-hidden>)
+endif()
+
+# EXPERIMENTAL: -fno-asynchronous-unwind-tables drops the *async* unwind tables
+# (.eh_frame / __unwind_info) used for signal/profiler backtraces. We deliberately
+# do NOT use -fno-unwind-tables: ada is C++ and relies on synchronous unwind for
+# exceptions. Dropping async tables keeps exceptions working but breaks
+# crash/signal backtraces, so this stays OFF by default.
+xoption(BUILD_WITH_NO_UNWIND_TABLES "EXPERIMENTAL: drop async unwind/.eh_frame tables" OFF)
+if(BUILD_WITH_NO_UNWIND_TABLES AND NOT MSVC)
+    add_compile_options(-fno-asynchronous-unwind-tables)
 endif()
 
 ###
@@ -220,6 +253,16 @@ if(BUILD_WITH_GC_SECTIONS)
     else()
         target_link_options(tjs-cli PRIVATE -Wl,--gc-sections)
     endif()
+endif()
+
+# Identical-code folding. Needs lld or gold; classic GNU bfd ld and Apple ld64
+# have no --icf, and MSVC already folds via /OPT:ICF in the GC_SECTIONS block
+# above, so this targets the ELF linkers only. --icf=safe folds only functions
+# the compiler marked address-insignificant (Clang emits these by default), so
+# function-pointer identity is preserved; --icf=all saves more but is unsafe.
+xoption(BUILD_WITH_ICF "If ON, fold identical functions at link (lld/gold, ELF only)" OFF)
+if(BUILD_WITH_ICF AND NOT APPLE AND NOT MSVC)
+    target_link_options(tjs-cli PRIVATE -Wl,--icf=safe)
 endif()
 
 add_executable(tjsc EXCLUDE_FROM_ALL

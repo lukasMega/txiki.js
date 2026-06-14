@@ -38,10 +38,13 @@ The binary can also be shrunk without dropping any feature, via compiler/linker
 optimizations (combinable):
 
 ```bash
-BUILD_WITH_STRIP=ON make        # strip the symbol table after linking
-BUILD_WITH_LTO=ON make          # link-time optimization
-BUILD_WITH_GC_SECTIONS=ON make  # dead-code stripping (per-function/data sections)
-BUILDTYPE=MinSizeRel make       # optimize for size (-Os) instead of speed
+BUILD_WITH_STRIP=ON make               # strip the symbol table after linking
+BUILD_WITH_LTO=ON make                 # link-time optimization
+BUILD_WITH_GC_SECTIONS=ON make         # dead-code stripping (per-function/data sections)
+BUILDTYPE=MinSizeRel make              # optimize for size (-Os) instead of speed
+BUILD_WITH_OZ=ON make                  # Clang -Oz aggressive size (MinSizeRel, Clang only)
+BUILD_WITH_HIDDEN_VISIBILITY=ON make   # hide non-exported symbols (-fvisibility=hidden)
+BUILD_WITH_ICF=ON make                 # fold identical functions at link (lld/gold; not macOS)
 ```
 
 See [Building](https://txikijs.org/docs/building) for the full reference.

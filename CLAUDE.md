@@ -43,12 +43,23 @@ BUILD_WITH_STRIP=ON make        # Strip the symbol table from the binary after l
 BUILD_WITH_LTO=ON make          # Enable link-time optimization (slower link, smaller/faster binary)
 BUILD_WITH_GC_SECTIONS=ON make  # Per-function/data sections + linker dead-code stripping
 BUILDTYPE=MinSizeRel make       # Optimize for size instead of speed (-Os)
+BUILD_WITH_OZ=ON make                  # Clang -Oz aggressive size for MinSizeRel (Clang only)
+BUILD_WITH_HIDDEN_VISIBILITY=ON make   # Hide non-exported symbols (-fvisibility=hidden)
+BUILD_WITH_ICF=ON make                 # Fold identical functions at link (lld/gold; not macOS)
+# BUILD_WITH_NO_UNWIND_TABLES=ON       # EXPERIMENTAL: drops async backtraces; verify before use
 ```
 
 `BUILD_WITH_STRIP` runs `${CMAKE_STRIP}` as a post-build step (skipped when `CMAKE_STRIP` is
 unset, e.g. MSVC). `BUILD_WITH_LTO` falls back to a warning if the toolchain can't do IPO.
 `BUILD_WITH_GC_SECTIONS` maps to `-Wl,--gc-sections` (GNU/lld), `-Wl,-dead_strip` (Apple), or
 `/OPT:REF /OPT:ICF` (MSVC). `BUILDTYPE=MinSizeRel` is a standard CMake build type (no extra flag).
+
+`BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
+MinSizeRel flag strings; no-op for other build types and a warning under GCC). `BUILD_WITH_ICF`
+needs lld or gold and is skipped on Apple ld64 (which already gets `-Wl,-dead_strip` from
+`BUILD_WITH_GC_SECTIONS`); it folds at `--icf=safe`. `BUILD_WITH_NO_UNWIND_TABLES`
+is experimental — it drops async unwind/`.eh_frame` tables (breaks signal/crash backtraces) while keeping
+C++ exception unwinding; leave it OFF unless you've verified your signal/error paths.
 
 ASAN and mimalloc are mutually exclusive. UBSAN is not supported on MSVC.
 
