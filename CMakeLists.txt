@@ -65,11 +65,10 @@ xoption(BUILD_WITH_SQLITE "If ON (default), build with SQLite (the tjs:sqlite mo
 xoption(BUILD_WITH_STRIP "If ON, strip the tjs binary after linking" OFF)
 xoption(BUILD_WITH_LTO "If ON, enable link-time optimization" OFF)
 xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections and link with dead-code stripping" OFF)
-xoption(BUILD_WITH_STRIP "If ON, strip the tjs binary after linking" OFF)
-xoption(BUILD_WITH_LTO "If ON, enable link-time optimization" OFF)
 # -Oz does strictly more size work than -Os, but is Clang-only. Rewrite only the
 # *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
 xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
+xoption(BUILD_WITH_TLS "If ON (default), build with TLS support (HTTPS/WSS/TLSSocket)" ON)
 
 if(BUILD_WITH_GC_STRESS)
     message(STATUS "GC stress mode enabled (FORCE_GC_AT_MALLOC)")
@@ -184,7 +183,6 @@ add_library(tjs STATIC
     src/mod_process.c
     src/mod_miniz.c
     src/mod_streams.c
-    src/mod_tls.c
     src/ed25519.c
     src/webcrypto.c
     src/mod_sys.c
@@ -209,6 +207,11 @@ endif()
 if(BUILD_WITH_SQLITE)
     target_sources(tjs PRIVATE src/mod_sqlite3.c)
     target_compile_definitions(tjs PRIVATE TJS_HAVE_SQLITE)
+endif()
+
+if(BUILD_WITH_TLS)
+    target_sources(tjs PRIVATE src/mod_tls.c)
+    target_compile_definitions(tjs PRIVATE TJS_HAVE_TLS)
 endif()
 
 set_target_properties(tjs PROPERTIES
@@ -428,7 +431,14 @@ set(MBEDTLS_AS_SUBPROJECT ON)
 set(MBEDTLS_USER_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/mbedtls_config.h" CACHE FILEPATH "" FORCE)
 set(MSVC_STATIC_RUNTIME ON CACHE BOOL "" FORCE)
 add_subdirectory(deps/mbedtls EXCLUDE_FROM_ALL)
-target_link_libraries(tjs PUBLIC mbedtls mbedx509 mbedcrypto)
+# libmbedcrypto is always linked: webcrypto.c depends on it directly. The TLS
+# protocol layer (mbedtls) and certificate parsing (mbedx509) are only needed
+# when BUILD_WITH_TLS is on.
+if(BUILD_WITH_TLS)
+    target_link_libraries(tjs PUBLIC mbedtls mbedx509 mbedcrypto)
+else()
+    target_link_libraries(tjs PUBLIC mbedcrypto)
+endif()
 
 if (NOT CMAKE_BUILD_TYPE MATCHES "Debug")
     set(LWS_WITH_NO_LOGS ON CACHE BOOL "" FORCE)
@@ -470,8 +480,13 @@ set(LWS_WITH_LIBCAP OFF CACHE BOOL "" FORCE)
 set(LWS_WITH_BINDTODEVICE OFF CACHE BOOL "" FORCE)
 set(LWS_SSL_CLIENT_USE_OS_CA_CERTS OFF CACHE BOOL "" FORCE)
 set(LWS_WITH_LIBUV OFF CACHE BOOL "" FORCE)
-set(LWS_WITH_MBEDTLS ON CACHE BOOL "" FORCE)
-set(LWS_WITH_SSL ON CACHE BOOL "" FORCE)
+if(BUILD_WITH_TLS)
+    set(LWS_WITH_MBEDTLS ON CACHE BOOL "" FORCE)
+    set(LWS_WITH_SSL ON CACHE BOOL "" FORCE)
+else()
+    set(LWS_WITH_MBEDTLS OFF CACHE BOOL "" FORCE)
+    set(LWS_WITH_SSL OFF CACHE BOOL "" FORCE)
+endif()
 set(LWS_WITHOUT_EXTENSIONS ON CACHE BOOL "" FORCE)
 set(LWS_WITHOUT_TESTAPPS ON CACHE BOOL "" FORCE)
 set(LWS_WITH_SHARED OFF CACHE BOOL "" FORCE)
