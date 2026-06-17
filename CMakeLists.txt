@@ -64,6 +64,12 @@ xoption(BUILD_WITH_WASM "If ON (default), build with WASM/WAMR support" ON)
 xoption(BUILD_WITH_SQLITE "If ON (default), build with SQLite (the tjs:sqlite module)" ON)
 xoption(BUILD_WITH_STRIP "If ON, strip the tjs binary after linking" OFF)
 xoption(BUILD_WITH_LTO "If ON, enable link-time optimization" OFF)
+xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections and link with dead-code stripping" OFF)
+xoption(BUILD_WITH_STRIP "If ON, strip the tjs binary after linking" OFF)
+xoption(BUILD_WITH_LTO "If ON, enable link-time optimization" OFF)
+# -Oz does strictly more size work than -Os, but is Clang-only. Rewrite only the
+# *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
+xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
 
 if(BUILD_WITH_GC_STRESS)
     message(STATUS "GC stress mode enabled (FORCE_GC_AT_MALLOC)")
@@ -107,9 +113,14 @@ if(BUILD_WITH_LTO)
     endif()
 endif()
 
-# -Oz does strictly more size work than -Os, but is Clang-only. Rewrite only the
-# *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
-xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
+if(BUILD_WITH_GC_SECTIONS)
+    if(MSVC)
+        add_compile_options(/Gy)
+    else()
+        add_compile_options(-ffunction-sections -fdata-sections)
+    endif()
+endif()
+
 if(BUILD_WITH_OZ)
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         string(REPLACE "-Os" "-Oz" CMAKE_C_FLAGS_MINSIZEREL   "${CMAKE_C_FLAGS_MINSIZEREL}")
@@ -117,15 +128,6 @@ if(BUILD_WITH_OZ)
         message(STATUS "Using -Oz for MinSizeRel")
     else()
         message(WARNING "BUILD_WITH_OZ requested but compiler is not Clang; keeping -Os")
-    endif()
-endif()
-
-xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections and link with dead-code stripping" OFF)
-if(BUILD_WITH_GC_SECTIONS)
-    if(MSVC)
-        add_compile_options(/Gy)
-    else()
-        add_compile_options(-ffunction-sections -fdata-sections)
     endif()
 endif()
 
@@ -486,6 +488,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
 else()
     set(LWS_WITH_SYS_ASYNC_DNS ON CACHE BOOL "" FORCE)
 endif()
+set(LWS_WITH_SOCKS5 ON CACHE BOOL "" FORCE)
 set(LWS_WITH_CACHE_NSCOOKIEJAR ON CACHE BOOL "" FORCE)
 # Tell lws about mbedtls capabilities (CHECK_FUNCTION_EXISTS fails for static libs)
 set(LWS_HAVE_mbedtls_md_setup 1 CACHE BOOL "" FORCE)
@@ -515,15 +518,6 @@ endif()
 if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     target_compile_options(websockets PRIVATE -Wno-discarded-qualifiers)
 endif()
-# Upstream lws (commit 2c14cf18c "tcp tls: avoid building if h3 only") added the
-# LWS_WITH_TCP_TLS option and gated all TCP TLS code behind
-# `#if defined(LWS_WITH_TCP_TLS)`, but never added a matching entry to
-# lws_config.h.in. The option defaults ON for our build, yet without that entry
-# it never reaches the compiler as a define, so all TCP TLS read/write/handshake
-# code is silently compiled out and TLS stops working. Define it ourselves to
-# match the (ON) option value.
-if(LWS_WITH_TCP_TLS)
-    target_compile_definitions(websockets PRIVATE LWS_WITH_TCP_TLS)
-endif()
 target_link_libraries(tjs PUBLIC websockets)
 target_include_directories(tjs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebsockets/include)
+
