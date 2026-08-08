@@ -4,6 +4,8 @@ import './self.js';
 import './timers.js';
 import './event-target-polyfill.js';
 import './structured-clone.js';
+import './message-channel.js';
+import './broadcast-channel.js';
 
 import './text-encoding.js';
 import './text-encode-transform.js';
@@ -30,3 +32,4 @@ import './ws.js';
 import 'web-streams-polyfill/polyfill';
 import './compression-streams.js';
 import './ws-stream.js';
+import './eventsource.js';
