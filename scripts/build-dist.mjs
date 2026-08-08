@@ -60,10 +60,10 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // Size budgets. Only macOS arm64 has been measured; the others are recorded
 // after the first green CI run (the gate is report-only until --enforce-size).
 const BUDGETS = {
-    // 1,927,664 B measured 2026-08-08. The plan's 1,911,152 B figure was taken
-    // from an XHR-gated build; the 16,512 B difference is exactly the XHR
-    // polyfill, which this profile keeps.
-    'darwin-arm64': { budget: 2097152, measured: 1927664 },
+    // 2,026,944 B measured 2026-08-08 after merging upstream/master (h3/QUIC +
+    // a QuickJS bump cost ~99 KB over the 1,927,664 B pre-merge build). Only
+    // ~70 KB of headroom is left under the 2 MiB ceiling.
+    'darwin-arm64': { budget: 2097152, measured: 2026944 },
     'darwin-x64': { budget: 2097152 },
     'linux-x64': { budget: 2097152 },
     'linux-arm64': { budget: 2097152 },
@@ -583,8 +583,12 @@ check(typeof WebAssembly === 'undefined', 'WebAssembly should be compiled out');
 check(tjs.engine.features.wasm === false, 'features.wasm should be false');
 check(tjs.engine.features.sqlite === false, 'features.sqlite should be false');
 check(tjs.engine.features.tls === false, 'features.tls should be false');
-check(tjs.engine.features.webcrypto === true, 'features.webcrypto should be true');
+
+// WebCrypto is on in this profile. Assert the capability, not the feature
+// flag: tjs.engine.features.webcrypto only exists on builds that carry the
+// BUILD_WITH_WEBCRYPTO option, so check it only when it is reported.
 check(typeof crypto.subtle === 'object' && crypto.subtle !== null, 'crypto.subtle missing');
+check(tjs.engine.features.webcrypto !== false, 'features.webcrypto should not be false');
 check(typeof crypto.randomUUID() === 'string', 'randomUUID broken');
 
 // FFI: dlopen the platform libc and actually call into it.
