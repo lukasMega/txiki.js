@@ -427,8 +427,12 @@ static struct lws_vhost *tjs__create_client_vhost(TJSRuntime *qrt, const char *n
      * socket: the connection migrates to a new wsi, the request is left queued
      * on the txn queue, and fetch() never settles.  The h3 path sets ALPN "h3"
      * per connection (httpclient.c), which overrides this.
+     *
+     * ALPN is a TLS extension: lws only has the field when built with TLS.
      */
+#ifdef TJS_HAVE_TLS
     vinfo.alpn = "h2,http/1.1";
+#endif
     vinfo.pt_serv_buf_size = 16384;
     vinfo.max_http_header_data2 = 16384;
 #ifdef TJS_HAVE_TLS

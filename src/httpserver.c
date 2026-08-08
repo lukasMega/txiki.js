@@ -1485,7 +1485,9 @@ static JSValue tjs_httpserver_constructor(JSContext *ctx, JSValue new_target, in
     JSValue js_key = JS_GetPropertyStr(ctx, options, "keyPem");
 
     bool use_tls = JS_IsString(js_cert) && JS_IsString(js_key);
+#ifdef TJS_HAVE_TLS
     bool want_http3 = false;
+#endif
 
     if (use_tls) {
 #ifndef TJS_HAVE_TLS
@@ -1624,7 +1626,12 @@ static JSValue tjs_httpserver_constructor(JSContext *ctx, JSValue new_target, in
      * on the same port. lws does not open a UDP listener from vhost_info.port,
      * so we create a no-TCP-listener vhost and adopt the UDP socket explicitly.
      * It shares the server's protocols/user, cert and key with the TCP vhost;
-     * the TCP vhost advertises h3 to clients via an Alt-Svc header. */
+     * the TCP vhost advertises h3 to clients via an Alt-Svc header.
+     *
+     * QUIC is always TLS 1.3, and the ssl_ and alpn fields below only exist in
+     * lws when it is built with TLS. want_http3 can never be set on a TLS-less
+     * build (the certPem/keyPem path throws above), so compile it out. */
+#ifdef TJS_HAVE_TLS
     if (want_http3) {
         /* A wildcard bind address must be passed as NULL: lws_create_adopt_udp
          * would otherwise try to resolve the literal string. */
@@ -1690,6 +1697,7 @@ static JSValue tjs_httpserver_constructor(JSContext *ctx, JSValue new_target, in
 
         s->vhost_count = 2;
     }
+#endif
 
     JS_FreeCString(ctx, listen_ip);
 
