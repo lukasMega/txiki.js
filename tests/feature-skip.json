@@ -20,5 +20,12 @@
     "test-fetch-pooled-custom-headers.js",
     "test-serve-empty-request-body.js",
     "test-teardown-live-tls.js"
+  ],
+  "bundledCa": [
+    "test-tls-external.js"
+  ],
+  "webcrypto": [
+    "test-webcrypto-*.js",
+    "test-app-compile.js"
   ]
 }

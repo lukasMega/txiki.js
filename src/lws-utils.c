@@ -219,10 +219,27 @@ static void tjs__set_ca_info(TJSRuntime *qrt, struct lws_context_creation_info *
     if (qrt->lws.ca_bundle_data) {
         info->client_ssl_ca_mem = qrt->lws.ca_bundle_data;
         info->client_ssl_ca_mem_len = qrt->lws.ca_bundle_len + 1;
-    } else {
-        info->client_ssl_ca_mem = tjs_cacert_pem;
-        info->client_ssl_ca_mem_len = (unsigned int) tjs_cacert_pem_len + 1;
+        return;
     }
+
+#ifdef TJS_HAVE_BUNDLED_CA
+    size_t cacert_len;
+    const char *cacert_pem = tjs__cacert_pem(qrt, &cacert_len);
+    if (cacert_pem) {
+        /* lws stores this pointer for the lifetime of the vhost; the cache
+         * in qrt->tls is owned by the runtime and freed at teardown, so it
+         * stays valid for as long as lws needs it. */
+        info->client_ssl_ca_mem = cacert_pem;
+        info->client_ssl_ca_mem_len = (unsigned int) cacert_len;
+    }
+#endif
+    /* Neither a user-supplied bundle nor an embedded one is available: leave
+     * client_ssl_ca_mem unset. With BUILD_WITH_BUNDLED_CA=OFF the only
+     * supported CA source is then an explicit TJS_CA_BUNDLE/setCABundlePath
+     * (lws's LWS_SSL_CLIENT_USE_OS_CA_CERTS is a no-op for the mbedtls
+     * backend we build with — see the comment in CMakeLists.txt). With no CA
+     * source at all, lws/mbedtls fails certificate verification with a clear
+     * error rather than skipping it. */
 }
 #endif
 

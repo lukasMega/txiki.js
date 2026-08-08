@@ -37,6 +37,7 @@ export default [
                 __TJS_APP__: 'readonly',
                 __TJS_HELP__: 'readonly',
                 __TJS_TLS_CA__: 'readonly',
+                __TJS_XHR__: 'readonly',
             },
         },
         rules: {

@@ -46,6 +46,19 @@ RUN_MAIN_DEFINES ?= \
 	--define:__TJS_HELP__=true \
 	--define:__TJS_TLS_CA__=true
 
+# Same dead-code-elimination pattern as RUN_MAIN_DEFINES, applied to the
+# polyfills bundle. All default to true (full build unchanged). See
+# .claude/plans/2026-06-18_binary-size-reduction-3.md (lever L5).
+#
+# NOTE: a __TJS_URLPATTERN__ define was tried and dropped -- the
+# urlpattern-polyfill npm package's default entry point has an unconditional
+# top-level side effect (auto-installs onto globalThis) and its package.json
+# doesn't declare "sideEffects": false, so esbuild's tree-shaking treats it as
+# unremovable regardless of whether the binding is used. Measured saving was
+# ~70 bytes (noise) vs. the ~4.8 KB for XHR below, not worth the complexity.
+POLYFILLS_DEFINES ?= \
+	--define:__TJS_XHR__=true
+
 all: $(TJS)
 
 $(BUILD_DIR)/CMakeCache.txt:
@@ -63,6 +76,8 @@ src/bundles/js/core/polyfills.js: src/js/polyfills/*.js src/js/polyfills/**/*.js
 		--metafile=$@.json \
 		--outfile=$@ \
 		--external:tjs:* \
+		--minify-syntax \
+		$(POLYFILLS_DEFINES) \
 		$(ESBUILD_PARAMS_MINIFY) \
 		$(ESBUILD_PARAMS_COMMON)
 

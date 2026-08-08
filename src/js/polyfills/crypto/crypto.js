@@ -37,12 +37,18 @@ function randomUUID() {
     return core.randomUUID();
 }
 
-const subtle = new SubtleCrypto();
+/*
+ * crypto.subtle depends on the native webcrypto module (src/webcrypto.c),
+ * which is compiled out when BUILD_WITH_WEBCRYPTO=OFF (LITE profile only).
+ * getRandomValues/randomUUID above are backed by src/mod_os.c instead and
+ * keep working regardless.
+ */
+const subtle = core.webcrypto ? new SubtleCrypto() : undefined;
 
 const crypto = Object.freeze({
     getRandomValues,
     randomUUID,
-    subtle,
+    ...(subtle ? { subtle } : {}),
 });
 
 Object.defineProperty(globalThis, 'crypto', {

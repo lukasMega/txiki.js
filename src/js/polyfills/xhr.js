@@ -406,20 +406,26 @@ class XMLHttpRequest extends EventTarget {
     }
 }
 
-const xhrProto = XMLHttpRequest.prototype;
+// Exported as a function (rather than run at module scope) so that, when
+// __TJS_XHR__ is compiled out (see index.js), this whole module -- including
+// the XMLHttpRequest class above -- has no remaining top-level side effects
+// and esbuild's tree-shaking can drop it entirely.
+export function installXHR() {
+    const xhrProto = XMLHttpRequest.prototype;
 
-defineEventAttribute(xhrProto, 'abort');
-defineEventAttribute(xhrProto, 'error');
-defineEventAttribute(xhrProto, 'load');
-defineEventAttribute(xhrProto, 'loadend');
-defineEventAttribute(xhrProto, 'loadstart');
-defineEventAttribute(xhrProto, 'progress');
-defineEventAttribute(xhrProto, 'readystatechange');
-defineEventAttribute(xhrProto, 'timeout');
+    defineEventAttribute(xhrProto, 'abort');
+    defineEventAttribute(xhrProto, 'error');
+    defineEventAttribute(xhrProto, 'load');
+    defineEventAttribute(xhrProto, 'loadend');
+    defineEventAttribute(xhrProto, 'loadstart');
+    defineEventAttribute(xhrProto, 'progress');
+    defineEventAttribute(xhrProto, 'readystatechange');
+    defineEventAttribute(xhrProto, 'timeout');
 
-Object.defineProperty(globalThis, 'XMLHttpRequest', {
-    enumerable: true,
-    configurable: true,
-    writable: true,
-    value: XMLHttpRequest
-});
+    Object.defineProperty(globalThis, 'XMLHttpRequest', {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: XMLHttpRequest
+    });
+}

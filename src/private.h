@@ -130,7 +130,11 @@ struct TJSRuntime {
     struct {
         bool initialized;
         mbedtls_x509_crt cacert;
-        char *ca_bundle_path;
+#ifdef TJS_HAVE_BUNDLED_CA
+        /* Lazily-inflated embedded CA bundle cache; see cacert.h. */
+        char *cacert_pem_inflated;
+        size_t cacert_pem_inflated_len;
+#endif
     } tls;
 #endif
     struct {
@@ -204,7 +208,9 @@ void tjs__mod_udp_init(JSContext *ctx, JSValue ns);
 void tjs__mod_wasm_init(JSContext *ctx, JSValue ns);
 #endif
 void tjs__mod_worker_init(JSContext *ctx, JSValue ns);
+#ifdef TJS_HAVE_WEBCRYPTO
 void tjs__webcrypto_init(JSContext *ctx, JSValue ns);
+#endif
 void tjs__mod_ws_init(JSContext *ctx, JSValue ns);
 void tjs__mod_httpserver_init(JSContext *ctx, JSValue ns);
 void tjs__mod_url_init(JSContext *ctx, JSValue ns);

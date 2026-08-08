@@ -185,18 +185,26 @@ static int tjs_tls_ctx_init(JSContext *ctx) {
 
     mbedtls_x509_crt_init(&qrt->tls.cacert);
 
-    /* Load CA bundle: custom path first, then embedded. */
-    if (qrt->tls.ca_bundle_path) {
+    /* Load CA bundle: custom path first (shared with the lws/fetch override
+     * so setCABundlePath()/TJS_CA_BUNDLE take precedence for TLSSocket too),
+     * then the embedded bundle, if built in. */
+    if (qrt->lws.ca_bundle_path) {
         TBuf dbuf;
         tbuf_init(ctx, &dbuf);
-        if (tjs__load_file(ctx, &dbuf, qrt->tls.ca_bundle_path) == 0 && dbuf.size > 0) {
+        if (tjs__load_file(ctx, &dbuf, qrt->lws.ca_bundle_path) == 0 && dbuf.size > 0) {
             mbedtls_x509_crt_parse(&qrt->tls.cacert, dbuf.buf, dbuf.size);
         }
         tbuf_free(&dbuf);
     }
 
-    /* Always also parse the embedded bundle. */
-    mbedtls_x509_crt_parse(&qrt->tls.cacert, (const unsigned char *) tjs_cacert_pem, tjs_cacert_pem_len + 1);
+#ifdef TJS_HAVE_BUNDLED_CA
+    /* Always also parse the embedded bundle (inflated lazily, cached). */
+    size_t cacert_len;
+    const char *cacert_pem = tjs__cacert_pem(qrt, &cacert_len);
+    if (cacert_pem) {
+        mbedtls_x509_crt_parse(&qrt->tls.cacert, (const unsigned char *) cacert_pem, cacert_len + 1);
+    }
+#endif
 
     qrt->tls.initialized = true;
     return 0;
@@ -1332,6 +1340,8 @@ void tjs__mod_tls_cleanup(TJSRuntime *qrt) {
         mbedtls_x509_crt_free(&qrt->tls.cacert);
         qrt->tls.initialized = false;
     }
-    tjs__free(qrt->tls.ca_bundle_path);
-    qrt->tls.ca_bundle_path = NULL;
+#ifdef TJS_HAVE_BUNDLED_CA
+    tjs__free(qrt->tls.cacert_pem_inflated);
+    qrt->tls.cacert_pem_inflated = NULL;
+#endif
 }

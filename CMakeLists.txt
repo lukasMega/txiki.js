@@ -70,6 +70,11 @@ xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections a
 xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
 xoption(BUILD_WITH_TLS "If ON (default), build with TLS support (HTTPS/WSS/TLSSocket)" ON)
 xoption(BUILD_WITH_COMPRESSED_BYTECODE "If ON, compress embedded JS bytecode with miniz (needs tjsc -z)" OFF)
+xoption(BUILD_WITH_BUNDLED_CA "If ON (default, TLS builds only), embed the Mozilla CA bundle in the binary, otherwise rely on TJS_CA_BUNDLE/setCABundlePath or the OS trust store" ON)
+# LITE-profile-only, WinterTC-breaking: drops crypto.subtle (webcrypto.c,
+# ed25519.c/tweetnacl). crypto.getRandomValues/randomUUID are unaffected
+# (backed by src/mod_os.c, not webcrypto.c). Never default OFF.
+xoption(BUILD_WITH_WEBCRYPTO "If ON (default), build WebCrypto (crypto.subtle). If OFF, drops crypto.subtle (getRandomValues/randomUUID still work) -- LITE profile only, WinterTC-breaking" ON)
 
 if(BUILD_WITH_GC_STRESS)
     message(STATUS "GC stress mode enabled (FORCE_GC_AT_MALLOC)")
@@ -186,7 +191,6 @@ endif()
 
 add_library(tjs STATIC
     src/builtins.c
-    src/cacert.c
     src/error.c
     src/lws-evlib.c
     src/lws-utils.c
@@ -214,8 +218,6 @@ add_library(tjs STATIC
     src/mod_process.c
     src/mod_miniz.c
     src/mod_streams.c
-    src/ed25519.c
-    src/webcrypto.c
     src/mod_sys.c
     src/mod_udp.c
     src/url.c
@@ -228,6 +230,11 @@ add_library(tjs STATIC
 
 if(UNIX)
     target_sources(tjs PRIVATE src/mod_posix-socket.c)
+endif()
+
+if(BUILD_WITH_WEBCRYPTO)
+    target_sources(tjs PRIVATE src/ed25519.c src/webcrypto.c)
+    target_compile_definitions(tjs PRIVATE TJS_HAVE_WEBCRYPTO)
 endif()
 
 if(BUILD_WITH_WASM)
@@ -243,6 +250,13 @@ endif()
 if(BUILD_WITH_TLS)
     target_sources(tjs PRIVATE src/mod_tls.c)
     target_compile_definitions(tjs PRIVATE TJS_HAVE_TLS)
+
+    # The embedded CA bundle only makes sense (and is only referenced) when
+    # TLS is built in; BUILD_WITH_BUNDLED_CA is a TLS-on-only opt-out.
+    if(BUILD_WITH_BUNDLED_CA)
+        target_sources(tjs PRIVATE src/cacert.c src/cacert_inflate.c)
+        target_compile_definitions(tjs PRIVATE TJS_HAVE_BUNDLED_CA)
+    endif()
 endif()
 
 # Embedded JS bytecode is decompressed at load (eval.c/builtins.c) when this is
@@ -510,9 +524,14 @@ else()
 endif()
 
 add_subdirectory(deps/mbedtls EXCLUDE_FROM_ALL)
-# libmbedcrypto is always linked: webcrypto.c depends on it directly. The TLS
-# protocol layer (mbedtls) and certificate parsing (mbedx509) are only needed
-# when BUILD_WITH_TLS is on.
+# libmbedcrypto is always linked: besides webcrypto.c, src/mod_hashing.c (the
+# always-on tjs:hashing Hash class -- md5/sha1/sha256/sha512/sha3) depends on
+# it directly and unconditionally, independent of BUILD_WITH_TLS and
+# BUILD_WITH_WEBCRYPTO. (Originally planned to drop mbedcrypto entirely when
+# both TLS and WebCrypto are off; not possible without also gating
+# mod_hashing.c, which is out of scope here -- it is a general-purpose hashing
+# API, not part of WebCrypto.) The TLS protocol layer (mbedtls) and
+# certificate parsing (mbedx509) are only needed when BUILD_WITH_TLS is on.
 if(BUILD_WITH_TLS)
     target_link_libraries(tjs PUBLIC mbedtls mbedx509 mbedcrypto)
 else()
@@ -558,7 +577,20 @@ set(LWS_WITH_GZINFLATE OFF CACHE BOOL "" FORCE)
 # needs lws_plat_apply_FD_CLOEXEC from plat/unix/unix-file.c.
 set(LWS_WITH_LIBCAP OFF CACHE BOOL "" FORCE)
 set(LWS_WITH_BINDTODEVICE OFF CACHE BOOL "" FORCE)
-set(LWS_SSL_CLIENT_USE_OS_CA_CERTS OFF CACHE BOOL "" FORCE)
+# NOTE: lws only implements LWS_SSL_CLIENT_USE_OS_CA_CERTS for the OpenSSL and
+# SChannel TLS backends (lib/tls/openssl/openssl-client.c,
+# lib/plat/windows/windows-sockets.c — the latter explicitly #ifs out
+# LWS_WITH_MBEDTLS). We build lws with LWS_WITH_MBEDTLS unconditionally, so
+# this is a no-op for every platform txiki.js targets today; it is set
+# defensively (harmless) in case that ever changes. With the embedded bundle
+# compiled out (BUILD_WITH_BUNDLED_CA=OFF), the only supported CA sources are
+# TJS_CA_BUNDLE/setCABundlePath — without one, HTTPS/WSS fails cert
+# verification with a clear mbedtls/lws error rather than skipping it.
+if(BUILD_WITH_TLS AND NOT BUILD_WITH_BUNDLED_CA)
+    set(LWS_SSL_CLIENT_USE_OS_CA_CERTS ON CACHE BOOL "" FORCE)
+else()
+    set(LWS_SSL_CLIENT_USE_OS_CA_CERTS OFF CACHE BOOL "" FORCE)
+endif()
 set(LWS_WITH_LIBUV OFF CACHE BOOL "" FORCE)
 if(BUILD_WITH_TLS)
     set(LWS_WITH_MBEDTLS ON CACHE BOOL "" FORCE)

@@ -18,7 +18,12 @@ import './file.js';
 import './file-reader.js';
 import './form-data.js';
 import './abort-controller.js';
-import './xhr.js';
+import { installXHR } from './xhr.js';
+
+if (__TJS_XHR__) {
+    installXHR();
+}
+
 import './fetch/polyfill.js';
 
 import './console.js';

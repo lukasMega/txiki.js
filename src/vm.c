@@ -275,7 +275,9 @@ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
     tjs__mod_hashing_init(ctx, ns);
     tjs__mod_httpclient_init(ctx, ns);
     tjs__mod_miniz_init(ctx, ns);
+#ifdef TJS_HAVE_WEBCRYPTO
     tjs__webcrypto_init(ctx, ns);
+#endif
     tjs__mod_ws_init(ctx, ns);
     tjs__mod_httpserver_init(ctx, ns);
 #ifndef _WIN32
