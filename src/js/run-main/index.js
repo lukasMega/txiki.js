@@ -52,7 +52,7 @@ const Trailer = {
 };
 
 const exeName = path.basename(tjs.args[0]);
-const help = `Usage: ${exeName} [options] [subcommand]
+const help = __TJS_HELP__ ? `Usage: ${exeName} [options] [subcommand]
 
 Options:
   -v, --version
@@ -94,7 +94,7 @@ Subcommands:
         Compile the given file into a standalone executable
 
   app <subcommand>
-        Manage tpk app packages`;
+        Manage tpk app packages` : `Usage: ${exeName} [options] [subcommand]`;
 
 const helpBundle = `Usage: ${exeName} bundle [options] infile [outfile]
 
@@ -199,13 +199,16 @@ const isBundled = await (async () => {
 
 if (!isBundled) {
     const options = getopts(tjs.args.slice(1), {
-        alias: {
+        alias: __TJS_HELP__ ? {
             eval: 'e',
             help: 'h',
             version: 'v'
+        } : {
+            eval: 'e',
+            version: 'v'
         },
-        boolean: [ 'h', 'v' ],
-        string: [ 'e', 'tls-ca' ],
+        boolean: __TJS_HELP__ ? [ 'h', 'v' ] : [ 'v' ],
+        string: __TJS_TLS_CA__ ? [ 'e', 'tls-ca' ] : [ 'e' ],
         stopEarly: true,
         unknown: option => {
             if (![ 'memory-limit', 'stack-size', 'wasm-stack-size' ].includes(option)) {
@@ -216,7 +219,7 @@ if (!isBundled) {
         }
     });
 
-    if (options.help) {
+    if (__TJS_HELP__ && options.help) {
         console.log(help);
     } else if (options.version) {
         console.log(`v${tjs.version}`);
@@ -238,9 +241,9 @@ if (!isBundled) {
             core.setWasmStackSize(parseNumberOption(wasmStackSize, 'wasm-stack-size'));
         }
 
-        const caBundlePath = options['tls-ca'] || TJS_CA_BUNDLE;
+        const caBundlePath = (__TJS_TLS_CA__ ? options['tls-ca'] : undefined) || TJS_CA_BUNDLE;
 
-        if (caBundlePath) {
+        if (__TJS_TLS_CA__ && caBundlePath) {
             core.setCABundlePath(path.resolve(caBundlePath));
         }
 
@@ -252,7 +255,7 @@ if (!isBundled) {
             } else {
                 evalStdin();
             }
-        } else if (command === 'eval') {
+        } else if (__TJS_EVAL__ && command === 'eval') {
             const [ expr ] = subargv;
 
             if (!expr) {
@@ -305,7 +308,7 @@ if (!isBundled) {
 
                 await core.evalFile(filename);
             }
-        } else if (command === 'serve') {
+        } else if (__TJS_SERVE__ && command === 'serve') {
             const serveOpts = getopts(subargv, {
                 alias: { port: 'p' },
                 string: [ 'p', 'tls-cert', 'tls-key' ],
@@ -345,17 +348,17 @@ if (!isBundled) {
             const scheme = tls ? 'https' : 'http';
 
             console.log(`Listening on ${scheme}://localhost:${server.port}/`);
-        } else if (command === 'bundle') {
+        } else if (__TJS_BUNDLER__ && command === 'bundle') {
             const ok = await bundle(TJS_HOME, subargv);
 
             if (!ok) {
                 throw helpBundle;
             }
-        } else if (command === 'test') {
+        } else if (__TJS_TEST_RUNNER__ && command === 'test') {
             const [ dir ] = subargv;
 
             runTests(dir);
-        } else if (command === 'compile') {
+        } else if (__TJS_COMPILE__ && command === 'compile') {
             const [ infile, outfile ] = subargv;
 
             if (!infile) {
@@ -384,7 +387,7 @@ if (!isBundled) {
             }
 
             await tjs.writeFile(newFileName, newExe, { mode: 0o755 });
-        } else if (command === 'app') {
+        } else if (__TJS_APP__ && command === 'app') {
             const [ appCommand, ...appSubargv ] = subargv;
 
             if (!appCommand) {

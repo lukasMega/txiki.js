@@ -24,6 +24,7 @@
  * THE SOFTWARE.
  */
 #include "../deps/quickjs/cutils.h"
+#include "miniz.h"
 #include "quickjs.h"
 
 #include <assert.h>
@@ -100,6 +101,7 @@ static namelist_t cmodule_list;
 static namelist_t init_module_list;
 static FILE *outfile;
 static int strip;
+static int compress_bc;
 
 void namelist_add(namelist_t *lp, const char *name, const char *short_name, int flags) {
     namelist_entry_t *e;
@@ -200,10 +202,30 @@ static void output_object_code(JSContext *ctx,
 
     namelist_add(&cname_list, c_name, NULL, 0);
 
-    fprintf(fo, "const uint32_t %s%s_size = %u;\n\n", prefix, c_name, (unsigned int) out_buf_len);
-    fprintf(fo, "const uint8_t %s%s[%u] = {\n", prefix, c_name, (unsigned int) out_buf_len);
-    dump_hex(fo, out_buf, out_buf_len);
-    fprintf(fo, "};\n\n");
+    if (compress_bc) {
+        mz_ulong comp_bound = mz_compressBound((mz_ulong) out_buf_len);
+        uint8_t *blob = malloc(4 + comp_bound);
+        if (!blob) { fprintf(stderr, "qjsc: out of memory compressing %s\n", c_name); exit(1); }
+        /* 4-byte LE uncompressed length header */
+        blob[0] = (uint8_t)(out_buf_len & 0xff);
+        blob[1] = (uint8_t)((out_buf_len >> 8) & 0xff);
+        blob[2] = (uint8_t)((out_buf_len >> 16) & 0xff);
+        blob[3] = (uint8_t)((out_buf_len >> 24) & 0xff);
+        mz_ulong comp_len = comp_bound;
+        int zr = mz_compress2(blob + 4, &comp_len, out_buf, (mz_ulong) out_buf_len, 9);
+        if (zr != MZ_OK) { fprintf(stderr, "qjsc: mz_compress2 failed (%d) for %s\n", zr, c_name); exit(1); }
+        size_t blob_len = 4 + (size_t) comp_len;
+        fprintf(fo, "const uint32_t %s%s_size = %u;\n\n", prefix, c_name, (unsigned int) blob_len);
+        fprintf(fo, "const uint8_t %s%s[%u] = {\n", prefix, c_name, (unsigned int) blob_len);
+        dump_hex(fo, blob, blob_len);
+        fprintf(fo, "};\n\n");
+        free(blob);
+    } else {
+        fprintf(fo, "const uint32_t %s%s_size = %u;\n\n", prefix, c_name, (unsigned int) out_buf_len);
+        fprintf(fo, "const uint8_t %s%s[%u] = {\n", prefix, c_name, (unsigned int) out_buf_len);
+        dump_hex(fo, out_buf, out_buf_len);
+        fprintf(fo, "};\n\n");
+    }
 
     js_free(ctx, out_buf);
 }
@@ -281,7 +303,8 @@ void help(void) {
            "-p prefix   set a prefix for the generated variables\n"
            "-n name     set the module name\n"
            "-m          compile as Javascript module (default=autodetect)\n"
-           "-s          strip source code (if -ss is specified debugging info is also stripped)\n",
+           "-s          strip source code (if -ss is specified debugging info is also stripped)\n"
+           "-z          compress emitted bytecode with miniz\n",
            JS_GetVersion());
     exit(1);
 }
@@ -305,7 +328,7 @@ int main(int argc, char **argv) {
     strip = 0;
 
     for (;;) {
-        c = getopt(argc, argv, "ho:p:n:ms");
+        c = getopt(argc, argv, "ho:p:n:msz");
         if (c == -1)
             break;
         switch (c) {
@@ -325,6 +348,9 @@ int main(int argc, char **argv) {
                 break;
             case 's':
                 strip++;
+                break;
+            case 'z':
+                compress_bc = 1;
                 break;
             default:
                 break;

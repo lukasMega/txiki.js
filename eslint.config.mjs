@@ -29,6 +29,14 @@ export default [
             sourceType: 'module',
             globals: {
                 ...globals.browser,
+                __TJS_EVAL__: 'readonly',
+                __TJS_SERVE__: 'readonly',
+                __TJS_BUNDLER__: 'readonly',
+                __TJS_TEST_RUNNER__: 'readonly',
+                __TJS_COMPILE__: 'readonly',
+                __TJS_APP__: 'readonly',
+                __TJS_HELP__: 'readonly',
+                __TJS_TLS_CA__: 'readonly',
             },
         },
         rules: {

@@ -87,7 +87,7 @@ JSModuleDef *tjs__load_builtin(JSContext *ctx, const char *name) {
         return NULL;
     }
 
-    JSValue obj = JS_ReadObject(ctx, item->data, item->data_size, JS_READ_OBJ_BYTECODE);
+    JSValue obj = tjs__read_bytecode(ctx, item->data, item->data_size);
 
     CHECK_EQ(JS_IsException(obj), 0);
     CHECK_EQ(JS_VALUE_GET_TAG(obj), JS_TAG_MODULE);

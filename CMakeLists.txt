@@ -69,6 +69,7 @@ xoption(BUILD_WITH_GC_SECTIONS "If ON, compile with per-function/data sections a
 # *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
 xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
 xoption(BUILD_WITH_TLS "If ON (default), build with TLS support (HTTPS/WSS/TLSSocket)" ON)
+xoption(BUILD_WITH_COMPRESSED_BYTECODE "If ON, compress embedded JS bytecode with miniz (needs tjsc -z)" OFF)
 
 if(BUILD_WITH_GC_STRESS)
     message(STATUS "GC stress mode enabled (FORCE_GC_AT_MALLOC)")
@@ -138,6 +139,35 @@ xoption(BUILD_WITH_HIDDEN_VISIBILITY "If ON, compile with -fvisibility=hidden" O
 if(BUILD_WITH_HIDDEN_VISIBILITY AND NOT MSVC)
     add_compile_options(-fvisibility=hidden)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fvisibility-inlines-hidden>)
+endif()
+
+# Strip the absolute build path from the binary. The CHECK/assert macros
+# (src/utils.h) and libuv/lws embed __FILE__, which otherwise bakes the full
+# source path — e.g. /Users/<you>/.../src/vm.c — into the binary as plain string
+# data (__cstring) that BUILD_WITH_STRIP cannot remove. -ffile-prefix-map rewrites
+# __FILE__ (and debug paths) at compile time for every TU, also giving
+# reproducible builds. Placed before add_subdirectory so it covers vendored deps.
+xoption(BUILD_WITH_REPRODUCIBLE_PATHS "If ON, remap __FILE__/debug paths to strip the absolute source path" OFF)
+if(BUILD_WITH_REPRODUCIBLE_PATHS AND NOT MSVC)
+    add_compile_options(-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.)
+endif()
+
+# Exploit-mitigation flags for distributed binaries. Low-risk, broadly applicable
+# set only (verified to compile on Apple clang arm64). PIE/ASLR is already the
+# macOS default; ELF-only knobs (RELRO, -z now, noexecstack) and x86 CET
+# (-fcf-protection) do not apply to Mach-O and are omitted. Clang CFI
+# (-fsanitize=cfi) is intentionally NOT used: it breaks tjs:ffi's dlopen of
+# external libraries. Placed before add_subdirectory so it also covers deps.
+xoption(BUILD_WITH_HARDENING "If ON, enable exploit-mitigation flags (stack protector, zero-init, arm64 PAC/BTI, FORTIFY)" OFF)
+if(BUILD_WITH_HARDENING AND NOT MSVC)
+    add_compile_options(-fstack-protector-strong)
+    add_compile_options(-ftrivial-auto-var-init=zero)
+    # FORTIFY_SOURCE needs optimization; harmless (and a no-op warning) at -O0.
+    add_compile_options($<$<NOT:$<CONFIG:Debug>>:-D_FORTIFY_SOURCE=2>)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        # PAC return-address signing + BTI (ROP/JOP mitigation) on AArch64.
+        add_compile_options(-mbranch-protection=standard)
+    endif()
 endif()
 
 # EXPERIMENTAL: -fno-asynchronous-unwind-tables drops the *async* unwind tables
@@ -212,6 +242,13 @@ endif()
 if(BUILD_WITH_TLS)
     target_sources(tjs PRIVATE src/mod_tls.c)
     target_compile_definitions(tjs PRIVATE TJS_HAVE_TLS)
+endif()
+
+# Embedded JS bytecode is decompressed at load (eval.c/builtins.c) when this is
+# defined; the bundles must then be generated with `tjsc -z` (Makefile
+# TJSC_COMPRESS=-z). Both are driven together by the build:smallest* tasks.
+if(BUILD_WITH_COMPRESSED_BYTECODE)
+    target_compile_definitions(tjs PRIVATE TJS_COMPRESSED_BYTECODE)
 endif()
 
 set_target_properties(tjs PROPERTIES
@@ -348,6 +385,9 @@ set_target_properties(${_tjs_test_libs} PROPERTIES
 )
 
 add_subdirectory(deps/ada EXCLUDE_FROM_ALL)
+# URLPattern is provided by the urlpattern-polyfill JS bundle; ada's C++
+# implementation is unused — compile it out (~45 KiB of dead code).
+target_compile_definitions(ada PRIVATE ADA_INCLUDE_URL_PATTERN=0)
 target_link_libraries(tjs PUBLIC ada)
 
 if(BUILD_WITH_WASM)
@@ -423,6 +463,9 @@ endif()
 
 add_subdirectory(deps/miniz EXCLUDE_FROM_ALL)
 target_link_libraries(tjs PUBLIC miniz)
+# tjsc (qjsc.c) includes miniz.h for the optional -z bytecode compression; link
+# it here, after the miniz target exists.
+target_link_libraries(tjsc miniz)
 
 option(ENABLE_TESTING "" OFF)
 option(ENABLE_PROGRAMS "" OFF)

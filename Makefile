@@ -19,13 +19,32 @@ STDLIB_MODULES=$(wildcard src/js/stdlib/*.js)
 ESBUILD?=npx esbuild
 ESBUILD_PARAMS_COMMON=--target=esnext --platform=neutral --format=esm --main-fields=main,module
 ESBUILD_PARAMS_MINIFY=--minify --keep-names
-TJSC_PARAMS_STIP=-s
+# Optional bytecode compression: pass -z to tjsc so embedded bytecode is
+# deflated with miniz. Empty by default (no compression). The build:smallest*
+# tasks set TJSC_COMPRESS=-z together with -DBUILD_WITH_COMPRESSED_BYTECODE=ON.
+# Threaded through every tjsc rule via TJSC_PARAMS_STIP below.
+TJSC_COMPRESS?=
+TJSC_PARAMS_STIP=-s $(TJSC_COMPRESS)
 JS_NO_STRIP?=0
 
 ifeq ($(JS_NO_STRIP),1)
 	ESBUILD_PARAMS_MINIFY=
-	TJSC_PARAMS_STIP=
+	TJSC_PARAMS_STIP=$(TJSC_COMPRESS)
 endif
+
+# CLI subcommand/option gating for the run-main bundle. All default to true
+# (full CLI). The untracked slim.sh wrapper overrides this on the command line
+# (make RUN_MAIN_DEFINES="...") to compile commands out via esbuild dead-code
+# elimination. See .claude/plans/2026-06-17_cli-command-removal.md.
+RUN_MAIN_DEFINES ?= \
+	--define:__TJS_EVAL__=true \
+	--define:__TJS_SERVE__=true \
+	--define:__TJS_BUNDLER__=true \
+	--define:__TJS_TEST_RUNNER__=true \
+	--define:__TJS_COMPILE__=true \
+	--define:__TJS_APP__=true \
+	--define:__TJS_HELP__=true \
+	--define:__TJS_TLS_CA__=true
 
 all: $(TJS)
 
@@ -80,6 +99,8 @@ src/bundles/js/core/run-main.js: src/js/run-main/*.js
 		--metafile=$@.json \
 		--outfile=$@ \
 		--external:tjs:* \
+		--minify-syntax \
+		$(RUN_MAIN_DEFINES) \
 		$(ESBUILD_PARAMS_MINIFY) \
 		$(ESBUILD_PARAMS_COMMON)
 
