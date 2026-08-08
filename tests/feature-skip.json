@@ -12,6 +12,13 @@
   "tls": [
     "test-tls-*.js",
     "test-dispose-tls.js",
-    "test-fetch-allow-insecure.js"
+    "test-fetch-allow-insecure.js",
+    "test-fetch-h2-*.js",
+    "test-fetch-h3-*.js",
+    "test-serve-h2-*.js",
+    "test-fetch-alpn-no-h3-over-tcp.js",
+    "test-fetch-pooled-custom-headers.js",
+    "test-serve-empty-request-body.js",
+    "test-teardown-live-tls.js"
   ]
 }
