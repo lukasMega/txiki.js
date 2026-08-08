@@ -157,14 +157,26 @@ declare global {
 
             /**
             * Build-time feature flags reflecting the CMake options the binary
-            * was compiled with. `wasm` corresponds to `BUILD_WITH_WASM` (the
-            * `WebAssembly` global and `tjs:wasi`) and `sqlite` to
-            * `BUILD_WITH_SQLITE` (the `tjs:sqlite` module and persistent
-            * `localStorage`).
+            * was compiled with:
+            *
+            * - `wasm` — `BUILD_WITH_WASM`: the `WebAssembly` global and `tjs:wasi`.
+            * - `sqlite` — `BUILD_WITH_SQLITE`: the `tjs:sqlite` module and
+            *   persistent `localStorage`.
+            * - `tls` — `BUILD_WITH_TLS`: HTTPS/WSS and `tjs:tls`. WebCrypto is
+            *   unaffected by this one.
+            * - `bundledCa` — `BUILD_WITH_BUNDLED_CA`: the embedded Mozilla CA
+            *   bundle. When false, TLS builds need `TJS_CA_BUNDLE` or
+            *   `setCABundlePath()` to verify certificates.
+            * - `webcrypto` — `BUILD_WITH_WEBCRYPTO`: `crypto.subtle`.
+            *   `crypto.getRandomValues()` and `crypto.randomUUID()` are always
+            *   present.
             */
             readonly features: {
                 readonly wasm: boolean;
                 readonly sqlite: boolean;
+                readonly tls: boolean;
+                readonly bundledCa: boolean;
+                readonly webcrypto: boolean;
             };
         }
 
