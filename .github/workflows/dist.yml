@@ -1,0 +1,98 @@
+name: Dist (slim binary)
+
+# Builds the distributed slim `tjs` binary on every supported platform via the
+# portable Node driver (scripts/build-dist.mjs). The size gate is report-only
+# until real per-platform numbers are recorded -- pass --enforce-size then.
+#
+# Profiles (see .claude/plans/2026-08-08_ci-portable-build-script.md):
+#   Unix    -> smallest-compressed-with-ffi-hardened
+#   Windows -> smallest-compressed-with-ffi   (MSVC compiles the hardening and
+#              most size levers out; the artifact is deliberately not called
+#              "hardened" and gets its own size budget)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    paths:
+      - 'scripts/build-dist.mjs'
+      - '.github/workflows/dist.yml'
+      - 'CMakeLists.txt'
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+          - name: macos-arm64
+            os: macos-15
+          - name: windows-x86_64
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y libffi-dev
+
+      - name: Setup vcpkg (Windows)
+        if: runner.os == 'Windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '66c0373dc7fca549e5803087b9487edfe3aca0a1'
+
+      - name: Install libffi (Windows)
+        if: runner.os == 'Windows'
+        env:
+          VCPKG_DEFAULT_TRIPLET: x64-windows
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+        run: vcpkg install libffi:x64-windows-static
+
+      # esbuild is resolved from node_modules by the build script; `npx esbuild`
+      # is deliberately not used (network per run, version-unstable bundles).
+      - name: Install npm dependencies
+        run: npm install --ignore-scripts
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: node scripts/build-dist.mjs --out dist
+
+      - name: Build (Windows)
+        run: >
+          node scripts/build-dist.mjs --out dist
+          --cmake-arg "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          --cmake-arg "-DVCPKG_TARGET_TRIPLET=x64-windows-static"
+        if: runner.os == 'Windows'
+
+      - name: Job summary
+        shell: bash
+        run: |
+          {
+            echo "### ${{ matrix.name }}"
+            echo '```'
+            cat dist/BUILDINFO.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: txiki-slim-${{ matrix.name }}
+          path: dist
