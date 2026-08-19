@@ -16,7 +16,8 @@ on:
       release_tag:
         description: >-
           Publish the built binaries to a GitHub Release under this tag
-          (e.g. slim-v1.2.3). The tag is created on the checked-out commit if
+          (e.g. slim-ffi-v1.2.3). The tag is created on the checked-out commit
+          if
           it does not exist. Leave empty to only upload workflow artifacts.
         required: false
         type: string
@@ -28,7 +29,7 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
-      - "slim-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-ffi-v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
     paths:
       - 'scripts/build-dist.mjs'
@@ -126,16 +127,17 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: txiki-slim-${{ matrix.name }}
+          name: txiki-slim-ffi-${{ matrix.name }}
           path: dist
 
   # Publishes the slim binaries under Releases. Runs on any pushed tag matched
   # above, or on a manual run that supplied `release_tag` (the tag is then
   # created on the checked-out commit by the release action).
   #
-  # Asset names are prefixed `txiki-slim-` so they never collide with the
-  # upstream release.yml assets (`txiki-<platform>.zip`), which target the same
-  # `v*` tags and would otherwise overwrite each other on the same Release.
+  # Asset names are prefixed `txiki-slim-ffi-` (the profile strips WASM/SQLite/
+  # TLS but keeps tjs:ffi and WebCrypto), so they never collide with the upstream
+  # release.yml assets (`txiki-<platform>.zip`), which target the same `v*` tags
+  # and would otherwise overwrite each other on the same Release.
   release:
     name: release
     needs: build
@@ -147,7 +149,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: txiki-slim-*
+          pattern: txiki-slim-ffi-*
           merge-multiple: false
 
       - name: Package
@@ -168,6 +170,10 @@ jobs:
         run: |
           {
             echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`)."
+            echo
+            echo "Stripped: WebAssembly, SQLite, TLS (HTTPS/WSS/TLSSocket, CA bundle),"
+            echo "mimalloc, and the \`eval\`/\`serve\`/\`test\`/\`bundle\`/\`app\` subcommands."
+            echo "Kept: \`tjs:ffi\`, WebCrypto, \`run\`/REPL/\`compile\`."
             echo
             for f in dist/*/BUILDINFO.txt; do
               echo '```'
