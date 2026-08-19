@@ -194,12 +194,19 @@ jobs:
             echo "mimalloc, and no \`eval\`/\`serve\`/\`test\`/\`bundle\`/\`app\`"
             echo "subcommands. Always present: WebCrypto, \`run\`, the REPL, \`compile\`."
             echo
+            # GitHub renders raw HTML in release bodies, and the blank line
+            # after </summary> is what keeps the fenced blocks inside parsing
+            # as Markdown rather than as literal text.
+            echo '<details>'
+            echo "<summary>Per-artifact build info ($(ls -d dist/*/ | wc -l | tr -d ' ') builds)</summary>"
+            echo
             for f in dist/*/BUILDINFO.txt; do
               echo '```'
               echo "$(basename "$(dirname "$f")")"
               cat "$f"
               echo '```'
             done
+            echo '</details>'
           } > NOTES.md
 
       - uses: softprops/action-gh-release@v3
