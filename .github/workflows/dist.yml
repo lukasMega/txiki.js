@@ -198,7 +198,7 @@ jobs:
             # after </summary> is what keeps the fenced blocks inside parsing
             # as Markdown rather than as literal text.
             echo '<details>'
-            echo "<summary>Per-artifact build info ($(ls -d dist/*/ | wc -l | tr -d ' ') builds)</summary>"
+            echo "<summary>see details, sha256, ... ($(ls -d dist/*/ | wc -l | tr -d ' ') builds)</summary>"
             echo
             for f in dist/*/BUILDINFO.txt; do
               echo '```'
