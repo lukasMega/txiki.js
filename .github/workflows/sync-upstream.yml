@@ -1,0 +1,37 @@
+name: sync-upstream
+
+# Fast-forwards this fork's master to saghul/txiki.js. Runs daily and on demand.
+# Uses the REST "merge upstream" endpoint, which refuses to do anything when the
+# branches have diverged -- local commits on master are never rewritten or lost.
+
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event.repository.fork
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge upstream into master
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          status=$(gh api --method POST "repos/$REPO/merge-upstream" \
+            -f branch=master --jq .merge_type 2>&1) || {
+              echo "::warning::sync failed (likely diverged): $status"
+              exit 0
+            }
+          echo "merge_type=$status"
+          [ "$status" = "fast-forward" ] || [ "$status" = "none" ] \
+            || echo "::warning::master required a real merge commit ($status)"
