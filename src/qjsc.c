@@ -311,7 +311,7 @@ void help(void) {
 
 
 int main(int argc, char **argv) {
-    int c, i;
+    int i;
     const char *out_filename;
     const char *out_var_prefix;
     const char *modname;
@@ -327,37 +327,62 @@ int main(int argc, char **argv) {
     module = -1;
     strip = 0;
 
-    for (;;) {
-        c = getopt(argc, argv, "ho:p:n:msz");
-        if (c == -1)
+    /* Hand-rolled instead of getopt(): MSVC has no <unistd.h>, and this tool is
+       built as a host binary on Windows too. Same accepted forms as before:
+       clustered flags (-ms), attached (-ofile) or separate (-o file) values,
+       and "--" to end option parsing. */
+    for (i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+
+        if (arg[0] != '-' || arg[1] == '\0')
             break;
-        switch (c) {
-            case 'h':
-                help();
-            case 'o':
-                out_filename = optarg;
+        if (!strcmp(arg, "--")) {
+            i++;
+            break;
+        }
+
+        for (const char *p = arg + 1; *p; p++) {
+            const char **value = NULL;
+
+            switch (*p) {
+                case 'h':
+                    help();
+                case 'o':
+                    value = &out_filename;
+                    break;
+                case 'p':
+                    value = &out_var_prefix;
+                    break;
+                case 'n':
+                    value = &modname;
+                    break;
+                case 'm':
+                    module = 1;
+                    break;
+                case 's':
+                    strip++;
+                    break;
+                case 'z':
+                    compress_bc = 1;
+                    break;
+                default:
+                    break;
+            }
+
+            if (value) {
+                if (p[1] != '\0') {
+                    *value = p + 1;
+                } else if (i + 1 < argc) {
+                    *value = argv[++i];
+                } else {
+                    help();
+                }
                 break;
-            case 'p':
-                out_var_prefix = optarg;
-                break;
-            case 'n':
-                modname = optarg;
-                break;
-            case 'm':
-                module = 1;
-                break;
-            case 's':
-                strip++;
-                break;
-            case 'z':
-                compress_bc = 1;
-                break;
-            default:
-                break;
+            }
         }
     }
 
-    if (optind >= argc)
+    if (i >= argc)
         help();
 
     if (!out_filename)
@@ -384,7 +409,7 @@ int main(int argc, char **argv) {
             "#include <inttypes.h>\n"
             "\n");
 
-    for (i = optind; i < argc; i++) {
+    for (; i < argc; i++) {
         const char *filename = argv[i];
         compile_file(ctx, fo, filename, module, out_var_prefix, modname);
     }
