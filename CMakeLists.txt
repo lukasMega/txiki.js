@@ -612,6 +612,10 @@ else()
     set(LWS_WITH_MBEDTLS OFF CACHE BOOL "" FORCE)
     set(LWS_WITH_SSL OFF CACHE BOOL "" FORCE)
 endif()
+# lws defaults SChannel ON for Windows builds that pick no other TLS backend, so
+# a BUILD_WITH_TLS=OFF Windows build compiled schannel-ssl.c alongside the
+# no-ssl stubs and failed to link. We only ever use mbedtls.
+set(LWS_WITH_SCHANNEL OFF CACHE BOOL "" FORCE)
 set(LWS_WITHOUT_EXTENSIONS ON CACHE BOOL "" FORCE)
 set(LWS_WITHOUT_TESTAPPS ON CACHE BOOL "" FORCE)
 set(LWS_WITH_SHARED OFF CACHE BOOL "" FORCE)
