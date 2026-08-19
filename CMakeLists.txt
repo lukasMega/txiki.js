@@ -319,7 +319,20 @@ endif()
 # function-pointer identity is preserved; --icf=all saves more but is unsafe.
 xoption(BUILD_WITH_ICF "If ON, fold identical functions at link (lld/gold, ELF only)" OFF)
 if(BUILD_WITH_ICF AND NOT APPLE AND NOT MSVC)
-    target_link_options(tjs-cli PRIVATE -Wl,--icf=safe)
+    # The default ELF linker on most distros is still GNU bfd ld, which rejects
+    # --icf outright ("unrecognized option"), so probe before adding it rather
+    # than breaking every link on a toolchain that cannot fold.
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
+        include(CheckLinkerFlag)
+        check_linker_flag(C "-Wl,--icf=safe" TJS_HAVE_ICF)
+    else()
+        set(TJS_HAVE_ICF TRUE)
+    endif()
+    if(TJS_HAVE_ICF)
+        target_link_options(tjs-cli PRIVATE -Wl,--icf=safe)
+    else()
+        message(WARNING "BUILD_WITH_ICF requested but the linker has no --icf (needs lld or gold); skipping")
+    endif()
 endif()
 
 add_executable(tjsc EXCLUDE_FROM_ALL
