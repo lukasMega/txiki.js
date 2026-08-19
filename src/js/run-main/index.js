@@ -37,15 +37,15 @@ const TJS_CA_BUNDLE = tjs.env.TJS_CA_BUNDLE ?? tjs.env.SSL_CERT_FILE ?? null;
 
 /**
  * Trailer for standalone binaries. When some code gets bundled with the tjs
- * executable we add a 12 byte trailer. The first 8 bytes are the magic
- * string that helps us understand this is a standalone binary, and the
- * remaining 4 are the offset (from the beginning of the binary) where the
- * bundled data is located.
+ * executable we add a 12 byte trailer. The first 8 bytes identify raw or
+ * deflated bytecode, and the remaining 4 are the offset (from the beginning
+ * of the binary) where the bundled data is located.
  *
  * The offset is stored as a 32bit little-endian number.
  */
 const Trailer = {
     Magic: 'tx1k1.js',
+    CompressedMagic: 'tx1k1.jz',
     MagicSize: 8,
     DataSize: 4,
     Size: 12
@@ -155,6 +155,40 @@ Options:
 
 const decoder = new TextDecoder();
 
+async function transformBytes(data, transform) {
+    const writer = transform.writable.getWriter();
+    const reader = transform.readable.getReader();
+    const chunks = [];
+    let length = 0;
+    const writing = (async () => {
+        await writer.write(data);
+        await writer.close();
+    })();
+
+    while (true) {
+        const { value, done } = await reader.read();
+
+        if (done) {
+            break;
+        }
+
+        chunks.push(value);
+        length += value.length;
+    }
+
+    await writing;
+
+    const result = new Uint8Array(length);
+    let offset = 0;
+
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+
+    return result;
+}
+
 // First, let's check if this is a standalone binary.
 const isBundled = await (async () => {
     const exef = await tjs.open(tjs.exePath, 'rb');
@@ -179,13 +213,17 @@ const isBundled = await (async () => {
     const magic = new Uint8Array(trailerBuf.buffer, 0, Trailer.MagicSize);
     const maybeMagic = decoder.decode(magic);
 
-    if (maybeMagic === Trailer.Magic) {
+    if (maybeMagic === Trailer.Magic || maybeMagic === Trailer.CompressedMagic) {
         const dw = new DataView(trailerBuf.buffer, Trailer.MagicSize, Trailer.DataSize);
         const offset = dw.getUint32(0, true);
-        const buf = new Uint8Array(exeSize - offset - Trailer.Size);
+        let buf = new Uint8Array(exeSize - offset - Trailer.Size);
 
         await exef.read(buf, offset);
         await exef.close();
+
+        if (maybeMagic === Trailer.CompressedMagic) {
+            buf = await transformBytes(buf, new DecompressionStream('deflate'));
+        }
 
         const bytecode = tjs.engine.deserialize(buf);
 
@@ -368,15 +406,18 @@ if (!isBundled) {
             const infilePath = path.parse(infile);
             const data = await tjs.readFile(infile);
             const bytecode = tjs.engine.serialize(tjs.engine.compile(data, infilePath.base));
+            const compressed = await transformBytes(bytecode, new CompressionStream('deflate'));
+            const payload = compressed.length < bytecode.length ? compressed : bytecode;
+            const magic = payload === compressed ? Trailer.CompressedMagic : Trailer.Magic;
             const exe = await tjs.readFile(tjs.exePath);
             const exeSize = exe.length;
-            const newBuffer = exe.buffer.transfer(exeSize + bytecode.length + Trailer.Size);
+            const newBuffer = exe.buffer.transfer(exeSize + payload.length + Trailer.Size);
             const newExe = new Uint8Array(newBuffer);
 
-            newExe.set(bytecode, exeSize);
-            newExe.set(new TextEncoder().encode(Trailer.Magic), exeSize + bytecode.length);
+            newExe.set(payload, exeSize);
+            newExe.set(new TextEncoder().encode(magic), exeSize + payload.length);
 
-            const dw = new DataView(newBuffer, exeSize + bytecode.length + Trailer.MagicSize, Trailer.DataSize);
+            const dw = new DataView(newBuffer, exeSize + payload.length + Trailer.MagicSize, Trailer.DataSize);
 
             dw.setUint32(0, exeSize, true);
 
@@ -422,4 +463,3 @@ function parseNumberOption(num, option) {
 
     return n;
 }
-
