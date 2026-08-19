@@ -34,7 +34,7 @@ const require = createRequire(import.meta.url);
 // The four published feature sets. Everything else (WASM, SQLite, mimalloc,
 // most CLI subcommands) is off in all of them; these only differ in FFI and
 // TLS, which are the two features that cost real size. Each maps 1:1 onto a
-// `build:dist-*` mise task and onto the `slim-<key>-v*` release tags.
+// `dist:*` mise task and onto a `slim-<key>-v*` release tag.
 const PROFILES = {
     min: { ffi: false, tls: false },
     ffi: { ffi: true, tls: false },
@@ -72,14 +72,11 @@ const ESBUILD_COMMON = [
 ];
 const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 
-// Size budgets for the `ffi` profile, which is the one with recorded numbers.
-// Only macOS arm64 has been measured; the others are recorded after the first
-// green CI run (the gate is report-only until --enforce-size).
+// Per-platform budget for the non-TLS profiles; PROFILE_SIZES adjusts it. Only
+// macOS arm64 has been measured; the others are recorded after the first green
+// CI run (the gate is report-only until --enforce-size).
 const BUDGETS = {
-    // 2,026,944 B measured 2026-08-08 after merging upstream/master (h3/QUIC +
-    // a QuickJS bump cost ~99 KB over the 1,927,664 B pre-merge build). Only
-    // ~70 KB of headroom is left under the 2 MiB ceiling.
-    'darwin-arm64': { budget: 2097152, measured: 2026944 },
+    'darwin-arm64': { budget: 2097152 },
     'darwin-x64': { budget: 2097152 },
     'linux-x64': { budget: 2097152 },
     'linux-arm64': { budget: 2097152 },
@@ -88,14 +85,14 @@ const BUDGETS = {
     'win32-x64': { budget: 3145728 },
 };
 
-// Budget adjustment per profile, relative to the `ffi` numbers above. mbedtls
-// plus the compressed CA bundle is the expensive one; dropping libffi saves
-// comparatively little.
-const BUDGET_DELTA = {
-    min: -131072,
-    ffi: 0,
-    tls: 786432,
-    'ffi-tls': 917504,
+// Budget adjustment per profile, relative to the `ffi` numbers above, and the
+// macOS arm64 sizes measured on 2026-08-19 at v26.6.0. mbedtls plus the
+// compressed CA bundle is the expensive part; dropping libffi saves ~51 KB.
+const PROFILE_SIZES = {
+    min: { delta: 0, measured: 1976112 },
+    ffi: { delta: 0, measured: 2026944 },
+    tls: { delta: 524288, measured: 2456752 },
+    'ffi-tls': { delta: 524288, measured: 2507584 },
 };
 
 // ---------------------------------------------------------------------------
@@ -754,18 +751,19 @@ function verifyCompile(bin, smokeFile) {
 function checkSize(bin) {
     const size = fs.statSync(bin).size;
     const entry = BUDGETS[platformKey] ?? {};
+    const profileSize = PROFILE_SIZES[opts.profile];
     const budget = Number(opts['max-size'])
-        || (entry.budget ?? 2097152) + BUDGET_DELTA[opts.profile];
+        || (entry.budget ?? 2097152) + profileSize.delta;
 
     log(`size:      ${fmtBytes(size)}  (budget ${fmtBytes(budget)}, ${platformKey}, `
         + `${opts.profile})`);
 
-    // The recorded baseline is an `ffi`-profile number; the others have none.
-    if (opts.profile === 'ffi' && entry.measured && size !== entry.measured) {
-        const delta = size - entry.measured;
+    // The recorded baselines are macOS arm64 numbers; skip the note elsewhere.
+    if (platformKey === 'darwin-arm64' && size !== profileSize.measured) {
+        const delta = size - profileSize.measured;
 
-        log(`note:      ${delta > 0 ? '+' : ''}${delta} B vs the recorded ${platformKey} baseline `
-            + `(${entry.measured} B)`);
+        log(`note:      ${delta > 0 ? '+' : ''}${delta} B vs the recorded ${platformKey} `
+            + `${opts.profile} baseline (${profileSize.measured} B)`);
     }
 
     const expect = Number(opts['expect-size']);
