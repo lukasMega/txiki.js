@@ -1,14 +1,15 @@
-name: Dist (slim binary)
+name: Dist (slim binaries)
 
-# Builds the distributed slim `tjs` binary on every supported platform via the
-# portable Node driver (scripts/build-dist.mjs). The size gate is report-only
-# until real per-platform numbers are recorded -- pass --enforce-size then.
+# Builds every published slim `tjs` profile on every supported platform via the
+# portable Node driver (scripts/build-dist.mjs), then puts all of them on one
+# Release. The size gate is report-only until real per-platform numbers are
+# recorded -- pass --enforce-size then.
 #
-# Profiles (see .claude/plans/2026-08-08_ci-portable-build-script.md):
-#   Unix    -> smallest-compressed-with-ffi-hardened
-#   Windows -> smallest-compressed-with-ffi   (MSVC compiles the hardening and
-#              most size levers out; the artifact is deliberately not called
-#              "hardened" and gets its own size budget)
+# Profiles (--profile): min, ffi, tls, ffi-tls. They differ only in FFI and TLS;
+# all four are MinSizeRel + compressed bytecode + slim CLI, and keep WebCrypto,
+# `run`, the REPL and `compile`. Unix builds are additionally hardened; MSVC
+# compiles the hardening and most size levers out, so those artifacts are named
+# without the "-hardened" suffix and get a larger size budget.
 
 on:
   workflow_dispatch:
@@ -16,9 +17,8 @@ on:
       release_tag:
         description: >-
           Publish the built binaries to a GitHub Release under this tag
-          (e.g. slim-ffi-v1.2.3). The tag is created on the checked-out commit
-          if
-          it does not exist. Leave empty to only upload workflow artifacts.
+          (e.g. slim-v1.2.3). The tag is created on the checked-out commit if it
+          does not exist. Leave empty to only upload workflow artifacts.
         required: false
         type: string
       prerelease:
@@ -29,7 +29,14 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+      # One tag publishes all four profiles as assets of a single Release. The
+      # per-profile spellings are accepted too, so `slim-tls-v1.2.3` works and
+      # simply names the profile someone cares about.
+      - "slim-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-min-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-ffi-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-tls-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-ffi-tls-v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
     paths:
       - 'scripts/build-dist.mjs'
@@ -38,21 +45,21 @@ on:
 
 jobs:
   build:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.profile }} ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      # Two axes, not `include`: an include entry whose keys are absent from the
+      # matrix is merged into every combination (last one winning) instead of
+      # multiplying out, which would silently build one platform four times.
       matrix:
-        include:
-          - name: linux-x86_64
-            os: ubuntu-latest
-          - name: linux-arm64
-            os: ubuntu-24.04-arm
-          - name: macos-arm64
-            os: macos-15
-          - name: windows-x86_64
-            os: windows-latest
+        profile: [ min, ffi, tls, ffi-tls ]
+        target:
+          - { name: linux-x86_64, os: ubuntu-latest }
+          - { name: linux-arm64, os: ubuntu-24.04-arm }
+          - { name: macos-arm64, os: macos-15 }
+          - { name: windows-x86_64, os: windows-latest }
     env:
       # mise.toml pins `ubi:saghul/txiki.js` for local use, and upstream publishes
       # no Linux asset for it. `mise run` installs every tool in the config before
@@ -79,11 +86,14 @@ jobs:
           node-version-file: '.nvmrc'
 
       - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && contains(matrix.profile, 'ffi')
         run: |
           sudo apt update
           sudo apt install -y libffi-dev
 
+      # Set up for every Windows profile, not just the FFI ones: the build step
+      # always passes the vcpkg toolchain file, which must exist even when the
+      # only package it provides (libffi) is not installed.
       - name: Setup vcpkg (Windows)
         if: runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
@@ -91,7 +101,7 @@ jobs:
           vcpkgGitCommitId: '66c0373dc7fca549e5803087b9487edfe3aca0a1'
 
       - name: Install libffi (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && contains(matrix.profile, 'ffi')
         env:
           VCPKG_DEFAULT_TRIPLET: x64-windows
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
@@ -104,13 +114,13 @@ jobs:
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
-        run: mise run dist -- --out dist
+        run: mise run dist -- --profile ${{ matrix.profile }} --out dist
 
       - name: Build (Windows)
         # node:util parseArgs refuses an option value that starts with a dash
         # unless it is written with `=`, so these cannot be split into two words.
         run: >
-          node scripts/build-dist.mjs --out dist
+          node scripts/build-dist.mjs --profile ${{ matrix.profile }} --out dist
           "--cmake-arg=-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
           "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
         if: runner.os == 'Windows'
@@ -119,7 +129,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "### ${{ matrix.name }}"
+            echo "### ${{ matrix.profile }} ${{ matrix.target.name }}"
             echo '```'
             cat dist/BUILDINFO.txt
             echo '```'
@@ -127,17 +137,17 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: txiki-slim-ffi-${{ matrix.name }}
+          name: txiki-slim-${{ matrix.profile }}-${{ matrix.target.name }}
           path: dist
 
   # Publishes the slim binaries under Releases. Runs on any pushed tag matched
   # above, or on a manual run that supplied `release_tag` (the tag is then
   # created on the checked-out commit by the release action).
   #
-  # Asset names are prefixed `txiki-slim-ffi-` (the profile strips WASM/SQLite/
-  # TLS but keeps tjs:ffi and WebCrypto), so they never collide with the upstream
-  # release.yml assets (`txiki-<platform>.zip`), which target the same `v*` tags
-  # and would otherwise overwrite each other on the same Release.
+  # All four profiles land on one Release as
+  # txiki-slim-<profile>-<platform>.zip. The `txiki-slim-` prefix also keeps them
+  # from colliding with the upstream release.yml assets (`txiki-<platform>.zip`),
+  # which target the same `v*` tags and would otherwise overwrite each other.
   release:
     name: release
     needs: build
@@ -149,7 +159,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: txiki-slim-ffi-*
+          pattern: txiki-slim-*
           merge-multiple: false
 
       - name: Package
@@ -169,11 +179,20 @@ jobs:
       - name: Release notes
         run: |
           {
-            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`)."
+            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`), four feature"
+            echo "profiles x four platforms."
             echo
-            echo "Stripped: WebAssembly, SQLite, TLS (HTTPS/WSS/TLSSocket, CA bundle),"
-            echo "mimalloc, and the \`eval\`/\`serve\`/\`test\`/\`bundle\`/\`app\` subcommands."
-            echo "Kept: \`tjs:ffi\`, WebCrypto, \`run\`/REPL/\`compile\`."
+            echo "| profile | FFI (\`tjs:ffi\`) | TLS (HTTPS/WSS/TLSSocket) |"
+            echo "| --- | --- | --- |"
+            echo "| \`min\`     | no  | no  |"
+            echo "| \`ffi\`     | yes | no  |"
+            echo "| \`tls\`     | no  | yes (bundled CA) |"
+            echo "| \`ffi-tls\` | yes | yes (bundled CA) |"
+            echo
+            echo "All four: MinSizeRel, compressed bytecode, hardened (except MSVC,"
+            echo "which compiles those levers out), no WebAssembly, no SQLite, no"
+            echo "mimalloc, and no \`eval\`/\`serve\`/\`test\`/\`bundle\`/\`app\`"
+            echo "subcommands. Always present: WebCrypto, \`run\`, the REPL, \`compile\`."
             echo
             for f in dist/*/BUILDINFO.txt; do
               echo '```'
@@ -186,7 +205,7 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          name: ${{ inputs.release_tag || github.ref_name }} (slim)
+          name: ${{ inputs.release_tag || github.ref_name }} (slim builds)
           body_path: NOTES.md
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease }}
           files: |
