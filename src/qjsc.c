@@ -147,6 +147,14 @@ static void get_c_name(char *buf, size_t buf_size, const char *file) {
     size_t len, i;
 
     p = strrchr(file, '/');
+#ifdef _WIN32
+    /* The build driver passes absolute paths; without this the drive letter and
+       the backslashes end up inside the generated C identifier. */
+    const char *b = strrchr(file, '\\');
+
+    if (b && (!p || b > p))
+        p = b;
+#endif
     if (!p)
         p = file;
     else
@@ -159,7 +167,8 @@ static void get_c_name(char *buf, size_t buf_size, const char *file) {
         len = buf_size - 1;
     memcpy(buf, p, len);
     for (i = 0; i < len; i++) {
-        if (buf[i] == '-')
+        if (!((buf[i] >= 'a' && buf[i] <= 'z') || (buf[i] >= 'A' && buf[i] <= 'Z') ||
+              (buf[i] >= '0' && buf[i] <= '9')))
             buf[i] = '_';
     }
     buf[len] = '\0';
