@@ -52,6 +52,12 @@ jobs:
             os: macos-15
           - name: windows-x86_64
             os: windows-latest
+    env:
+      # mise.toml pins `ubi:saghul/txiki.js` for local use, and upstream publishes
+      # no Linux asset for it. `mise run` installs every tool in the config before
+      # running a task, so without this the Linux jobs die installing a binary the
+      # build never uses.
+      MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,10 +71,6 @@ jobs:
         uses: jdx/mise-action@v3
         with:
           experimental: true
-          # Only node. mise.toml also pins `ubi:saghul/txiki.js`, whose upstream
-          # releases have no Linux asset -- installing every tool would fail the
-          # Linux runners for a binary the build does not need.
-          install_args: node
 
       - uses: actions/setup-node@v6
         if: runner.os == 'Windows'
