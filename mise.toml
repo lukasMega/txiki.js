@@ -1,0 +1,394 @@
+[tools]
+node = "24"
+"ubi:saghul/txiki.js" = { version = "26.6.0", exe = "tjs" }
+
+# Smallest possible binary: drop every optional feature (WASM/SQLITE/TLS/FFI/
+# mimalloc) and apply every size knob: MinSizeRel + OZ + LTO + GC_SECTIONS +
+# HIDDEN_VISIBILITY + ICF + STRIP + experimental NO_UNWIND_TABLES.
+# Note: ICF is a no-op on macOS (Apple ld64 has no --icf). NO_UNWIND_TABLES is
+# experimental (drops crash backtraces). TLS=OFF drops HTTPS/WSS/TLSSocket
+# (WebCrypto unaffected).
+[tasks."build:smallest"]
+description = "Smallest binary: drop WASM/SQLITE/TLS/FFI/mimalloc + all size knobs"
+run = """
+cmake -B build-smallest \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_TLS=OFF \
+  -DBUILD_WITH_FFI=OFF \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON
+cmake --build build-smallest
+echo "Build size: $(du -h build-smallest/tjs | cut -f1)"
+ls -lh build-smallest/tjs
+"""
+
+[tasks."test:smallest"]
+description = "Run tests against the smallest build"
+run = "./build-smallest/tjs test tests/"
+depends = ["build:smallest"]
+
+# Smallest binary WITH the slim CLI: every build:smallest feature/size knob PLUS
+# the run-main CLI gated down — drops the eval/serve/test/bundle/compile/app
+# subcommands and the --help/-h and --tls-ca options (keeps run, stdin-eval,
+# REPL, --version, and the memory/stack flags). The CLI gating is done via
+# esbuild --define on the run-main bundle; see slim.sh and
+# .claude/plans/2026-06-17_cli-command-removal.md. TJS_NO_TLS_CA also compiles
+# out the vm.c CA-setter (matches __TJS_TLS_CA__=false).
+[tasks."build:smallest-slim"]
+description = "Smallest binary + slim CLI (drops subcommands, --help, --tls-ca)"
+run = """
+SLIM_DEFINES="--define:__TJS_EVAL__=false --define:__TJS_SERVE__=false \
+--define:__TJS_BUNDLER__=false --define:__TJS_TEST_RUNNER__=false \
+--define:__TJS_COMPILE__=true --define:__TJS_APP__=false \
+--define:__TJS_HELP__=false --define:__TJS_TLS_CA__=false"
+
+# Regenerate the shared run-main bundle with the slim gating defines. -B forces
+# it (a flag-only change does not bump source timestamps); this also builds
+# build/tjsc on first run.
+make -B src/bundles/c/core/run-main.c RUN_MAIN_DEFINES="$SLIM_DEFINES"
+
+cmake -B build-smallest-slim \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_TLS=OFF \
+  -DBUILD_WITH_FFI=OFF \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON \
+  -DCMAKE_C_FLAGS="-DTJS_NO_TLS_CA"
+cmake --build build-smallest-slim
+
+# Restore the full-CLI run-main bundle so a plain `make` / `build:smallest`
+# stays unaffected (src/bundles is shared across build dirs).
+make -B src/bundles/c/core/run-main.c
+
+echo "Build size: $(du -h build-smallest-slim/tjs | cut -f1)"
+ls -lh build-smallest-slim/tjs
+"""
+
+[tasks."test:smallest-slim"]
+description = "Run tests against the smallest + slim-CLI build"
+run = "./build-smallest-slim/tjs test tests/"
+depends = ["build:smallest-slim"]
+
+# Smallest binary + slim CLI + COMPRESSED bytecode. Everything build:smallest-slim
+# does, PLUS the embedded JS bytecode is deflated with miniz (tjsc -z +
+# -DBUILD_WITH_COMPRESSED_BYTECODE=ON; decompressed lazily at load in eval.c).
+# That shaves a further ~240 KiB. ALL bundles (not just run-main) are regenerated
+# with -z, then restored uncompressed + full-CLI afterwards (src/bundles is shared
+# across build dirs). See .claude/plans/2026-06-18_binary-size-reduction-3.md.
+[tasks."build:smallest-compressed"]
+description = "Smallest binary + slim CLI + compressed bytecode (miniz, -z)"
+run = """
+SLIM_DEFINES="--define:__TJS_EVAL__=false --define:__TJS_SERVE__=false \
+--define:__TJS_BUNDLER__=false --define:__TJS_TEST_RUNNER__=false \
+--define:__TJS_COMPILE__=true --define:__TJS_APP__=false \
+--define:__TJS_HELP__=false --define:__TJS_TLS_CA__=false"
+
+# Regenerate ALL bundles via the DEFAULT build/ toolchain: slim CLI gating
+# (esbuild defines on run-main) + -z compression (tjsc). Must use build/ (not the
+# smallest dir): `make` re-runs its CMakeCache rule with Release/MIMALLOC defaults,
+# which would clobber the MinSizeRel config below if pointed at it.
+make -B core stdlib RUN_MAIN_DEFINES="$SLIM_DEFINES" TJSC_COMPRESS=-z
+
+cmake -B build-smallest-compressed \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_TLS=OFF \
+  -DBUILD_WITH_FFI=OFF \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON \
+  -DBUILD_WITH_COMPRESSED_BYTECODE=ON \
+  -DBUILD_WITH_REPRODUCIBLE_PATHS=ON \
+  -DCMAKE_C_FLAGS="-DTJS_NO_TLS_CA"
+cmake --build build-smallest-compressed
+
+# Restore full-CLI uncompressed bundles so a plain make / other build dirs work.
+make -B core stdlib
+
+echo "Build size: $(du -h build-smallest-compressed/tjs | cut -f1)"
+ls -lh build-smallest-compressed/tjs
+"""
+
+# NOTE: the slim CLI gates out the `test` subcommand, so this binary cannot run
+# the suite on itself (like build:smallest-slim). This smoke exercises the
+# compressed bundles via `run` (polyfills fetch/URLPattern, stdlib assert, URL).
+# Full-suite validation of the compression mechanism is done on a full-CLI
+# compressed build (BUILD_WITH_COMPRESSED_BYTECODE=ON, no slim defines).
+[tasks."test:smallest-compressed"]
+description = "Smoke the smallest + slim-CLI + compressed build (run-based; test subcommand is gated)"
+depends = ["build:smallest-compressed"]
+run = """
+cat > /tmp/tjs-smc-smoke.js <<'EOF'
+import assert from 'tjs:assert';
+assert.eq(1 + 1, 2, 'arithmetic');
+assert.eq(typeof fetch, 'function', 'fetch polyfill');
+assert.ok(new URLPattern({ pathname: '/:id' }).test('https://x.test/42'), 'URLPattern');
+assert.eq(new URL('https://x.test/p?q=1').pathname, '/p', 'URL');
+console.log('smallest-compressed smoke: OK');
+EOF
+./build-smallest-compressed/tjs run /tmp/tjs-smc-smoke.js"""
+
+# The absolute smallest tjs achievable with the current levers: every optional
+# feature dropped (WASM/SQLITE/TLS/FFI/mimalloc) + every size knob + slim CLI
+# gating + ada's unused URLPattern compiled out + COMPRESSED bytecode (miniz).
+# Delegates to build:smallest-compressed (single source of truth, no duplicated flags).
+[tasks."build:smallest-possible"]
+description = "Absolute smallest tjs (= build:smallest-compressed: all features off + size knobs + slim CLI + compressed bytecode)"
+alias = "tiny"
+depends = ["build:smallest-compressed"]
+run = """
+echo "Smallest possible tjs -> build-smallest-compressed/tjs"
+ls -lh build-smallest-compressed/tjs
+"""
+
+
+# Smallest binary that still does HTTPS/WSS and WebCrypto. Same levers as
+# build:smallest-compressed (MinSizeRel/-Oz, LTO, dead-strip, ICF, hidden
+# visibility, symbol strip, no unwind tables, reproducible paths, compressed
+# bytecode, slim CLI, no mimalloc) but KEEPS TLS + the embedded CA bundle +
+# crypto.subtle. WASM/SQLITE/FFI stay off.
+#
+# The `--tls-ca` CLI option and its C setter are kept here (unlike the TLS-less
+# smallest builds) so a custom trust store can still be pointed at at runtime.
+[tasks."build:smallest-tls"]
+description = "Smallest binary with TLS + bundled CA + WebCrypto (slim CLI, compressed bytecode)"
+alias = "tiny-tls"
+run = """
+SLIM_DEFINES="--define:__TJS_EVAL__=false --define:__TJS_SERVE__=false \
+--define:__TJS_BUNDLER__=false --define:__TJS_TEST_RUNNER__=false \
+--define:__TJS_COMPILE__=true --define:__TJS_APP__=false \
+--define:__TJS_HELP__=false --define:__TJS_TLS_CA__=true"
+
+# Regenerate ALL bundles via the DEFAULT build/ toolchain (see
+# build:smallest-compressed for why build/ and not the target dir).
+make -B core stdlib RUN_MAIN_DEFINES="$SLIM_DEFINES" TJSC_COMPRESS=-z
+
+cmake -B build-smallest-tls \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_FFI=OFF \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_TLS=ON \
+  -DBUILD_WITH_BUNDLED_CA=ON \
+  -DBUILD_WITH_WEBCRYPTO=ON \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON \
+  -DBUILD_WITH_COMPRESSED_BYTECODE=ON \
+  -DBUILD_WITH_REPRODUCIBLE_PATHS=ON
+cmake --build build-smallest-tls
+
+# Restore full-CLI uncompressed bundles so a plain make / other build dirs work.
+make -B core stdlib
+
+echo "Build size: $(du -h build-smallest-tls/tjs | cut -f1)"
+ls -lh build-smallest-tls/tjs
+"""
+
+# TRUE floor + FFI. Everything build:smallest-possible drops (WASM/SQLITE/TLS/
+# mimalloc) PLUS webcrypto (BUILD_WITH_WEBCRYPTO=OFF, -166 KB), but KEEPS tjs:ffi.
+# This is the smallest build that can still call into native libraries.
+#
+# vs. build:smallest-compressed-with-ffi: that task predates BUILD_WITH_WEBCRYPTO
+# and still ships crypto.subtle, so it is ~150 KB larger. Use this one unless you
+# specifically need WebCrypto.
+#
+# DROPS crypto.subtle (WinterTC-breaking) on top of the usual floor omissions;
+# crypto.getRandomValues/randomUUID still work. Also breaks `tjs app pack`/
+# `tjs app compile`, which hash via crypto.subtle.digest.
+# See .claude/plans/2026-06-18_binary-size-reduction-3.md ("Round 4").
+[tasks."build:smallest-lite-with-ffi"]
+description = "Smallest tjs that still has FFI: floor + webcrypto off + tjs:ffi (~1.52 MB)"
+alias = "tiny-ffi"
+run = """
+SLIM_DEFINES="--define:__TJS_EVAL__=false --define:__TJS_SERVE__=false \
+--define:__TJS_BUNDLER__=false --define:__TJS_TEST_RUNNER__=false \
+--define:__TJS_COMPILE__=true --define:__TJS_APP__=false \
+--define:__TJS_HELP__=false --define:__TJS_TLS_CA__=false"
+
+# Regenerate ALL bundles via the DEFAULT build/ toolchain: slim CLI gating
+# (esbuild defines on run-main) + -z compression (tjsc). Must use build/ (not the
+# target dir): `make` re-runs its CMakeCache rule with Release/MIMALLOC defaults,
+# which would clobber the MinSizeRel config below if pointed at it.
+make -B core stdlib RUN_MAIN_DEFINES="$SLIM_DEFINES" TJSC_COMPRESS=-z
+
+cmake -B build-smallest-lite-ffi \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_TLS=OFF \
+  -DBUILD_WITH_FFI=ON \
+  -DBUILD_WITH_WEBCRYPTO=OFF \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON \
+  -DBUILD_WITH_COMPRESSED_BYTECODE=ON \
+  -DBUILD_WITH_REPRODUCIBLE_PATHS=ON \
+  -DCMAKE_C_FLAGS="-DTJS_NO_TLS_CA"
+cmake --build build-smallest-lite-ffi
+
+# Restore full-CLI uncompressed bundles so a plain make / other build dirs work.
+make -B core stdlib
+
+echo "Build size: $(du -h build-smallest-lite-ffi/tjs | cut -f1)"
+ls -lh build-smallest-lite-ffi/tjs
+"""
+
+# The slim CLI gates out the `test` subcommand, so this binary cannot run the
+# suite on itself. Smoke it via `run`: FFI dlopen + call, plus the compressed
+# polyfill/stdlib bundles.
+[tasks."test:smallest-lite-with-ffi"]
+description = "Smoke the smallest-with-FFI build (run-based; test subcommand is gated)"
+depends = ["build:smallest-lite-with-ffi"]
+run = """
+cat > /tmp/tjs-lite-ffi-smoke.js <<'EOF'
+import assert from 'tjs:assert';
+import ffi from 'tjs:ffi';
+
+// FFI must actually dlopen and call into libc. There is no platform string on
+// the tjs namespace (tjs.system is a stats object), so just try both names.
+let lib;
+
+for (const name of [ 'libSystem.B.dylib', 'libc.so.6', 'libc.so' ]) {
+    try {
+        lib = new ffi.Lib(name);
+        break;
+    } catch { /* try next */ }
+}
+
+assert.ok(lib, 'dlopen libc');
+const abs = new ffi.CFunction(lib.symbol('abs'), ffi.types.sint, [ ffi.types.sint ]);
+assert.eq(abs.call(-42), 42, 'ffi abs()');
+
+// Compressed bundles must inflate.
+assert.eq(typeof fetch, 'function', 'fetch polyfill');
+assert.ok(new URLPattern({ pathname: '/:id' }).test('https://x.test/42'), 'URLPattern');
+assert.eq(new URL('https://x.test/p?q=1').pathname, '/p', 'URL');
+
+// Expected omissions for this profile.
+assert.eq(typeof crypto.getRandomValues, 'function', 'getRandomValues kept');
+assert.eq(typeof crypto.subtle, 'undefined', 'crypto.subtle dropped');
+assert.eq(typeof WebAssembly, 'undefined', 'WebAssembly dropped');
+
+console.log('smallest-lite-with-ffi smoke: OK');
+EOF
+./build-smallest-lite-ffi/tjs run /tmp/tjs-lite-ffi-smoke.js"""
+
+
+[tasks."build:smallest-compressed-with-ffi"]
+description = "Smallest binary + slim CLI + compressed bytecode, but KEEP FFI (tjs:ffi) and WebCrypto"
+run = """
+SLIM_DEFINES="--define:__TJS_EVAL__=false --define:__TJS_SERVE__=false \
+--define:__TJS_BUNDLER__=false --define:__TJS_TEST_RUNNER__=false \
+--define:__TJS_COMPILE__=true --define:__TJS_APP__=false \
+--define:__TJS_HELP__=false --define:__TJS_TLS_CA__=false"
+
+# Regenerate ALL bundles via the DEFAULT build/ toolchain: slim CLI gating
+# (esbuild defines on run-main) + -z compression (tjsc). Must use build/ (not the
+# smallest dir): `make` re-runs its CMakeCache rule with Release/MIMALLOC defaults,
+# which would clobber the MinSizeRel config below if pointed at it.
+make -B core stdlib RUN_MAIN_DEFINES="$SLIM_DEFINES" TJSC_COMPRESS=-z
+
+cmake -B build-smallest-compressed-ffi \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_TLS=OFF \
+  -DBUILD_WITH_FFI=ON \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON \
+  -DBUILD_WITH_COMPRESSED_BYTECODE=ON \
+  -DBUILD_WITH_REPRODUCIBLE_PATHS=ON \
+  -DCMAKE_C_FLAGS="-DTJS_NO_TLS_CA"
+cmake --build build-smallest-compressed-ffi
+
+# Restore full-CLI uncompressed bundles so a plain make / other build dirs work.
+make -B core stdlib
+
+echo "Build size: $(du -h build-smallest-compressed-ffi/tjs | cut -f1)"
+ls -lh build-smallest-compressed-ffi/tjs
+"""
+
+# Same as build:smallest-compressed-with-ffi PLUS exploit-mitigation hardening
+# (BUILD_WITH_HARDENING: -fstack-protector-strong, -ftrivial-auto-var-init=zero,
+# arm64 PAC/BTI, _FORTIFY_SOURCE=2). For distributed binaries. Costs ~+0.5 MB of
+# size (PAC/BTI in every prologue) at ~0 runtime. See
+# .claude/findings/2026-06-18_binary-hardening-distribution.md.
+[tasks."build:smallest-compressed-with-ffi-hardened"]
+description = "Dist build: smallest + slim CLI + compressed bytecode + FFI + hardening"
+run = """
+SLIM_DEFINES="--define:__TJS_EVAL__=false --define:__TJS_SERVE__=false \
+--define:__TJS_BUNDLER__=false --define:__TJS_TEST_RUNNER__=false \
+--define:__TJS_COMPILE__=true --define:__TJS_APP__=false \
+--define:__TJS_HELP__=false --define:__TJS_TLS_CA__=false"
+
+# Regenerate ALL bundles via the DEFAULT build/ toolchain: slim CLI gating
+# (esbuild defines on run-main) + -z compression (tjsc). Must use build/ (not the
+# hardened dir): `make` re-runs its CMakeCache rule with Release/MIMALLOC defaults,
+# which would clobber the MinSizeRel config below if pointed at it.
+make -B core stdlib RUN_MAIN_DEFINES="$SLIM_DEFINES" TJSC_COMPRESS=-z
+
+cmake -B build-smallest-compressed-ffi-hardened \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DBUILD_WITH_WASM=OFF \
+  -DBUILD_WITH_SQLITE=OFF \
+  -DBUILD_WITH_TLS=OFF \
+  -DBUILD_WITH_FFI=ON \
+  -DBUILD_WITH_MIMALLOC=OFF \
+  -DBUILD_WITH_OZ=ON \
+  -DBUILD_WITH_LTO=ON \
+  -DBUILD_WITH_GC_SECTIONS=ON \
+  -DBUILD_WITH_HIDDEN_VISIBILITY=ON \
+  -DBUILD_WITH_ICF=ON \
+  -DBUILD_WITH_STRIP=ON \
+  -DBUILD_WITH_NO_UNWIND_TABLES=ON \
+  -DBUILD_WITH_COMPRESSED_BYTECODE=ON \
+  -DBUILD_WITH_REPRODUCIBLE_PATHS=ON \
+  -DBUILD_WITH_HARDENING=ON \
+  -DCMAKE_C_FLAGS="-DTJS_NO_TLS_CA"
+cmake --build build-smallest-compressed-ffi-hardened
+
+# Restore full-CLI uncompressed bundles so a plain make / other build dirs work.
+make -B core stdlib
+
+echo "Build size: $(du -h build-smallest-compressed-ffi-hardened/tjs | cut -f1)"
+ls -lh build-smallest-compressed-ffi-hardened/tjs
+"""
