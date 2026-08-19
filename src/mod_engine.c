@@ -220,6 +220,11 @@ void tjs__mod_engine_init(JSContext *ctx, JSValue ns) {
 #else
     JS_DefinePropertyValueStr(ctx, features, "webcrypto", JS_FALSE, JS_PROP_C_W_E);
 #endif
+#ifdef TJS_HAVE_FFI
+    JS_DefinePropertyValueStr(ctx, features, "ffi", JS_TRUE, JS_PROP_C_W_E);
+#else
+    JS_DefinePropertyValueStr(ctx, features, "ffi", JS_FALSE, JS_PROP_C_W_E);
+#endif
 
     JSValue gc = JS_NewObjectProto(ctx, JS_NULL);
     JS_SetPropertyFunctionList(ctx, gc, tjs_gc_funcs, countof(tjs_gc_funcs));
