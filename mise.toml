@@ -233,10 +233,12 @@ make -B src/bundles/c/core/run-main.c
 ls -lh build-smallest-slim/tjs
 """
 
+# `build:smallest-slim` gates the test runner out, so this build cannot run the
+# suite on itself -- the full-CLI ./build/tjs drives the loop instead.
 [tasks."test:smallest-slim"]
 description = "Run tests against the smallest + slim-CLI build"
 depends = ["build:smallest-slim"]
-run = "./build-smallest-slim/tjs test tests/"
+run = "TJS_TEST_EXE=$(pwd)/build-smallest-slim/tjs ./build/tjs test tests/"
 
 # Full CLI, so this one can run the suite on itself.
 [tasks."build:smallest"]
@@ -328,3 +330,23 @@ run = "node scripts/build-dist.mjs"
 description = "Build all four published profiles"
 depends = ["dist:min", "dist:ffi", "dist:tls", "dist:ffi-tls"]
 run = "ls -lh dist/*/tjs"
+
+# The dist profiles have `tjs test` compiled out, so they cannot drive the suite
+# themselves. TJS_TEST_EXE lets the full-CLI ./build/tjs run the loop while the
+# shipped artifact executes every test file via `run` -- which is the binary we
+# actually want covered. The skip filter probes the artifact, not the host.
+# Note the {{arg}} template: mise appends bare task arguments to the end of the
+# command line, so a plain "$1" would always be empty here.
+[tasks."test:dist"]
+description = "Run the full suite against a dist artifact, e.g. `mise run test:dist ffi`"
+run = 'TJS_TEST_EXE=$(pwd)/dist/{{arg(name="profile", default="ffi")}}/tjs ./build/tjs test tests/'
+
+[tasks."test:dist:all"]
+description = "Run the full suite against all four published profiles"
+run = """
+set -eu
+for p in min ffi tls ffi-tls; do
+  echo "==> $p"
+  TJS_TEST_EXE="$(pwd)/dist/$p/tjs" ./build/tjs test tests/
+done
+"""

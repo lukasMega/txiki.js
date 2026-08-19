@@ -7,6 +7,14 @@ import { buildSkipFilter } from './skip.js';
 const verbose = Boolean(tjs.env.VERBOSE_TESTS);
 const TIMEOUT = Number(tjs.env.TJS_TEST_TIMEOUT) || 30 * 1000;
 
+/**
+ * The binary each test file is executed with. Defaults to ourselves; set
+ * TJS_TEST_EXE to drive a *different* build -- typically a slim dist artifact
+ * whose own `test` subcommand is compiled out, so a full-CLI build has to run
+ * the loop while the artifact under test runs each file via `run`.
+ */
+const testExe = tjs.env.TJS_TEST_EXE || tjs.exePath;
+
 const colors = {
     none:    '\x1b[0m',
     black:   '\x1b[30m',
@@ -35,7 +43,7 @@ class Test {
     }
 
     run() {
-        const args = [ tjs.exePath, 'run', this._fileName ];
+        const args = [ testExe, 'run', this._fileName ];
 
         this._proc = tjs.spawn(args, { stdout: 'pipe', stderr: 'pipe' });
         this._stdout = this._proc.stdout.text();

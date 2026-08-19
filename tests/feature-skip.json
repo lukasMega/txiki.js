@@ -27,5 +27,39 @@
   "webcrypto": [
     "test-webcrypto-*.js",
     "test-app-compile.js"
+  ],
+  "ffi": [
+    "test-ffi-*.js",
+    "test-dispose-ffi-dlopen.js"
+  ],
+  "cliEval": [
+    "test-console-*.js",
+    "test-mem-limit.js"
+  ],
+  "cliServe": [
+    "test-serve-basic.js",
+    "test-serve-custom-port.js",
+    "test-serve-echo.js",
+    "test-serve-nofile.js",
+    "test-serve-websocket.js",
+    "test-serve-websocket-query.js",
+    "test-fetch-formdata-roundtrip.js",
+    "test-import-http.js",
+    "test-import-http-timeout.js"
+  ],
+  "cliBundler": [
+    "test-bundle-*.js"
+  ],
+  "cliCompile": [
+    "test-compile.js"
+  ],
+  "cliApp": [
+    "test-app-compile.js"
+  ],
+  "cliHelp": [
+    "test-cli-help.js"
+  ],
+  "cliTlsCa": [
+    "test-tls-ca.js"
   ]
 }
