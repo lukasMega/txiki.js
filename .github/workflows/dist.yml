@@ -106,10 +106,12 @@ jobs:
         run: mise run dist -- --out dist
 
       - name: Build (Windows)
+        # node:util parseArgs refuses an option value that starts with a dash
+        # unless it is written with `=`, so these cannot be split into two words.
         run: >
           node scripts/build-dist.mjs --out dist
-          --cmake-arg "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
-          --cmake-arg "-DVCPKG_TARGET_TRIPLET=x64-windows-static"
+          "--cmake-arg=-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
         if: runner.os == 'Windows'
 
       - name: Job summary
