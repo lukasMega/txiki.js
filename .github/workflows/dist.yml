@@ -12,9 +12,23 @@ name: Dist (slim binary)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: >-
+          Publish the built binaries to a GitHub Release under this tag
+          (e.g. slim-v1.2.3). The tag is created on the checked-out commit if
+          it does not exist. Leave empty to only upload workflow artifacts.
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the release as a pre-release'
+        required: false
+        default: true
+        type: boolean
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+      - "slim-v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
     paths:
       - 'scripts/build-dist.mjs'
@@ -43,7 +57,21 @@ jobs:
         with:
           submodules: recursive
 
+      # Unix uses mise (mise.toml pins node and owns the `dist` task, so CI and
+      # local dev run the exact same command). Windows keeps setup-node: the
+      # mise task shell is POSIX sh, which the Windows runner does not have.
+      - name: Setup mise (Unix)
+        if: runner.os != 'Windows'
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+          # Only node. mise.toml also pins `ubi:saghul/txiki.js`, whose upstream
+          # releases have no Linux asset -- installing every tool would fail the
+          # Linux runners for a binary the build does not need.
+          install_args: node
+
       - uses: actions/setup-node@v6
+        if: runner.os == 'Windows'
         with:
           node-version-file: '.nvmrc'
 
@@ -73,7 +101,7 @@ jobs:
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
-        run: node scripts/build-dist.mjs --out dist
+        run: mise run dist -- --out dist
 
       - name: Build (Windows)
         run: >
@@ -96,3 +124,61 @@ jobs:
         with:
           name: txiki-slim-${{ matrix.name }}
           path: dist
+
+  # Publishes the slim binaries under Releases. Runs on any pushed tag matched
+  # above, or on a manual run that supplied `release_tag` (the tag is then
+  # created on the checked-out commit by the release action).
+  #
+  # Asset names are prefixed `txiki-slim-` so they never collide with the
+  # upstream release.yml assets (`txiki-<platform>.zip`), which target the same
+  # `v*` tags and would otherwise overwrite each other on the same Release.
+  release:
+    name: release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: txiki-slim-*
+          merge-multiple: false
+
+      - name: Package
+        run: |
+          cd dist
+          : > SHA256SUMS.txt
+          for dir in */; do
+            name="${dir%/}"
+            # actions/upload-artifact strips the executable bit; restore it
+            # before zipping (Info-ZIP preserves Unix permissions).
+            [ -f "${dir}tjs" ] && chmod +x "${dir}tjs"
+            awk -v d="$name" '{ print $1 "  " d "/" $2 }' "${dir}SHA256SUMS" >> SHA256SUMS.txt
+            zip -r "${name}.zip" "$dir"
+          done
+          cat SHA256SUMS.txt
+
+      - name: Release notes
+        run: |
+          {
+            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`)."
+            echo
+            for f in dist/*/BUILDINFO.txt; do
+              echo '```'
+              echo "$(basename "$(dirname "$f")")"
+              cat "$f"
+              echo '```'
+            done
+          } > NOTES.md
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: ${{ inputs.release_tag || github.ref_name }} (slim)
+          body_path: NOTES.md
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease }}
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt

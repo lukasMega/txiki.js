@@ -392,3 +392,12 @@ make -B core stdlib
 echo "Build size: $(du -h build-smallest-compressed-ffi-hardened/tjs | cut -f1)"
 ls -lh build-smallest-compressed-ffi-hardened/tjs
 """
+# Distributed artifact: the portable Node driver behind .github/workflows/dist.yml.
+# Unlike the build:* tasks above it also smoke-tests the binary and writes
+# dist/{tjs,SHA256SUMS,BUILDINFO.txt}. Same profile as
+# build:smallest-compressed-with-ffi-hardened, but reimplemented in Node so the
+# very same command runs on a Windows runner. Extra args are forwarded, e.g.
+#   mise run dist -- --out dist --enforce-size
+[tasks.dist]
+description = "Build the distributed slim binary into dist/ (used by CI)"
+run = "node scripts/build-dist.mjs"
