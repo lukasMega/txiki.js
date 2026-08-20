@@ -149,14 +149,24 @@ jobs:
         if: always()
         shell: bash
         run: |
-          sed 's/\x1b\[[0-9;]*m//g' test-output.txt > test-plain.txt || : > test-plain.txt
+          # printf, not \x1b: that spelling is GNU-sed-only, and on the Windows
+          # runner (git-bash) a sed that quietly matches nothing would leave the
+          # tallies at zero -- which reads as "clean".
+          esc=$(printf '\033')
+          sed "s/${esc}\[[0-9;]*m//g" test-output.txt > test-plain.txt || : > test-plain.txt
           count() { grep -cE "[[:space:]]$1\$" test-plain.txt || true; }
+          ok=$(count OK); skip=$(count SKIP); fail=$(count FAIL); timeout=$(count TIMEOUT)
+
+          if [ -s test-output.txt ] && [ $((ok + skip + fail + timeout)) -eq 0 ]; then
+            echo "::warning::the suite produced output but no result lines could be parsed"
+          fi
+
           {
             echo "### ${{ matrix.profile }} ${{ matrix.target.name }}"
             echo
             echo "| OK | SKIP | FAIL | TIMEOUT |"
             echo "| ---: | ---: | ---: | ---: |"
-            echo "| $(count OK) | $(count SKIP) | $(count FAIL) | $(count TIMEOUT) |"
+            echo "| $ok | $skip | $fail | $timeout |"
             echo
             echo '```'
             cat dist/BUILDINFO.txt || echo '(no BUILDINFO: the build failed)'
