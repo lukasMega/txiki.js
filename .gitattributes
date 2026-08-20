@@ -2,5 +2,19 @@
 
 src/bundles/** -diff
 
+# Generated. Never content-merge these: they are QuickJS bytecode byte-arrays,
+# and a three-way text merge yields bytecode that matches neither side -- with
+# no conflict markers to warn you. On a conflict keep ours and regenerate from
+# the merged src/js/** with `make js` (mise task `sync:upstream` does both).
+# CI's codegen job is the backstop: it fails if the regeneration was skipped.
+#
+# The driver must be registered per clone -- run scripts/setup-repo.sh.
+src/bundles/c/** merge=keep-ours
+
+# Generated *and* format-diverged: upstream ships a plain PEM blob, this fork
+# ships a miniz-compressed one (src/cacert_inflate.c). Never take upstream's.
+# Refresh deliberately with scripts/update-ca-bundle.sh, not during a merge.
+src/cacert.c merge=keep-ours
+
 # Keep PEM files with LF line endings on all platforms
 *.pem text eol=lf
