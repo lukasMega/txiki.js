@@ -50,20 +50,27 @@ Full documentation is available at **[txikijs.org](https://txikijs.org)**.
 
 This fork publishes size-optimized binaries alongside the normal build. Every profile is
 `MinSizeRel`/`-Oz` + LTO + dead-strip + ICF + hidden visibility + stripped symbols, with
-compressed bytecode, no mimalloc, no WebAssembly and no SQLite. They differ only in whether
-FFI and TLS are compiled in.
+compressed bytecode, no mimalloc and no WebAssembly. They differ only in whether FFI, TLS and
+SQLite are compiled in.
 
 Sizes are the **uncompressed `tjs` binary** from release
 [`slim-v26.6.0-6`](https://github.com/lukasMega/txiki.js-with-slim-builds/releases/tag/slim-v26.6.0-6),
 measured from the published artifacts, in MiB:
 
-| profile | FFI | TLS | linux-x86_64 | linux-arm64 | macos-arm64 | windows-x86_64 |
-| --- | :-: | :-: | ---: | ---: | ---: | ---: |
-| `min` | — | — | **1.83** | 2.08 | 1.92 | 2.30 |
-| `ffi` | ✓ | — | 1.87 | 2.15 | 1.96 | 2.37 |
-| `tls` | — | ✓ | 2.25 | 2.58 | 2.37 | 2.78 |
-| `ffi-tls` | ✓ | ✓ | 2.29 | 2.58 | 2.42 | 2.84 |
-| upstream `v26.6.0` | ✓ | ✓ | *(no asset)* | *(no asset)* | 5.64 | 5.33 |
+| profile | FFI | TLS | SQLite | linux-x86_64 | linux-arm64 | macos-arm64 | windows-x86_64 |
+| --- | :-: | :-: | :-: | ---: | ---: | ---: | ---: |
+| `min` | — | — | — | **1.83** | 2.08 | 1.92 | 2.30 |
+| `ffi` | ✓ | — | — | 1.87 | 2.15 | 1.96 | 2.37 |
+| `tls` | — | ✓ | — | 2.25 | 2.58 | 2.37 | 2.78 |
+| `sqlite` | — | — | ✓ | *(new)* | *(new)* | *(new)* | *(new)* |
+| `ffi-tls` | ✓ | ✓ | — | 2.29 | 2.58 | 2.42 | 2.84 |
+| `ffi-tls-sqlite` | ✓ | ✓ | ✓ | *(new)* | *(new)* | *(new)* | *(new)* |
+| upstream `v26.6.0` | ✓ | ✓ | ✓ | *(no asset)* | *(no asset)* | 5.64 | 5.33 |
+
+The two SQLite profiles are new and have not been through a release yet; their sizes are filled
+in from the first published run. Locally on macos-arm64 `sqlite` measures 2.77 MiB — SQLite is
+the single most expensive optional feature here, roughly +0.85 MiB. Only these two profiles have
+a persistent `localStorage`; on the others it falls back to an in-memory store.
 
 Against upstream's own assets — the only directly comparable pair, since upstream publishes no
 Linux binary — `min` is **34%** of the full macOS build (**43%** on Windows), and `ffi-tls`,
@@ -80,7 +87,7 @@ Two caveats the numbers do not show:
   the test suite on themselves. CI runs the whole suite *against* each shipped artifact using a
   full-CLI driver — see `TJS_TEST_EXE` in `CLAUDE.md`.
 
-All four profiles are built for all four platforms, and each one runs the full test suite before
+All six profiles are built for all four platforms, and each one runs the full test suite before
 it is published. Feature vectors are recorded per artifact in its `BUILDINFO.txt`.
 
 <br />

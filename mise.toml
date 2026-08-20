@@ -8,6 +8,7 @@ node = "24"
 # each task and stat'ing the linked binary:
 #
 #   task                                    bytes      MiB   FFI  TLS  crypto.subtle  hardened
+#   (the two SQLite rows were measured the same way on 2026-08-20)
 #   build:smallest-lite-with-ffi            1,614,928  1.54  yes  no   no             no
 #   build:smallest-compressed               1,730,384  1.65  no   no   yes            no
 #   build:smallest-compressed-with-ffi      1,781,232  1.70  yes  no   yes            no
@@ -18,9 +19,15 @@ node = "24"
 #   build:smallest-tls                      2,161,808  2.06  no   yes  yes            no
 #   dist:tls                                2,456,752  2.34  no   yes  yes            yes
 #   dist:ffi-tls                            2,507,584  2.39  yes  yes  yes            yes
+#   dist:sqlite                             2,906,224  2.77  no   no   yes            yes
+#   dist:ffi-tls-sqlite                     3,421,184  3.26  yes  yes  yes            yes
+#
+# SQLite is the most expensive optional feature by a distance: ~875 KB, more
+# than TLS + the bundled CA together.
 #
 # Every task above: MinSizeRel/-Oz, LTO, dead-strip, ICF, hidden visibility,
-# symbol strip, no unwind tables, no mimalloc, no WASM, no SQLite. The `dist:*`
+# symbol strip, no unwind tables, no mimalloc, no WASM, and no SQLite except in
+# the two `*sqlite` profiles. The `dist:*`
 # tasks add BUILD_WITH_HARDENING (+~245 KB of PAC/BTI prologues and stack
 # protectors) and are what CI publishes; they also smoke-test the result.
 #
@@ -321,14 +328,22 @@ run = "node scripts/build-dist.mjs --profile tls --build-dir build-dist-tls --ou
 description = "Published profile: FFI + TLS + bundled CA (2.39 MiB)"
 run = "node scripts/build-dist.mjs --profile ffi-tls --build-dir build-dist-ffi-tls --out dist/ffi-tls"
 
+[tasks."dist:sqlite"]
+description = "Published profile: SQLite, no FFI, no TLS (2.77 MiB)"
+run = "node scripts/build-dist.mjs --profile sqlite --build-dir build-dist-sqlite --out dist/sqlite"
+
+[tasks."dist:ffi-tls-sqlite"]
+description = "Published profile: FFI + TLS + bundled CA + SQLite, the widest (3.26 MiB)"
+run = "node scripts/build-dist.mjs --profile ffi-tls-sqlite --build-dir build-dist-ffi-tls-sqlite --out dist/ffi-tls-sqlite"
+
 # Raw driver; extra args are forwarded, e.g. `mise run dist -- --profile tls`.
 [tasks.dist]
 description = "Build a published profile into dist/ (defaults to --profile ffi)"
 run = "node scripts/build-dist.mjs"
 
 [tasks."dist:all"]
-description = "Build all four published profiles"
-depends = ["dist:min", "dist:ffi", "dist:tls", "dist:ffi-tls"]
+description = "Build every published profile"
+depends = ["dist:min", "dist:ffi", "dist:tls", "dist:ffi-tls", "dist:sqlite", "dist:ffi-tls-sqlite"]
 run = "ls -lh dist/*/tjs"
 
 # The dist profiles have `tjs test` compiled out, so they cannot drive the suite
@@ -382,10 +397,10 @@ git status --porcelain --untracked-files=no
 """
 
 [tasks."test:dist:all"]
-description = "Run the full suite against all four published profiles"
+description = "Run the full suite against every published profile"
 run = """
 set -eu
-for p in min ffi tls ffi-tls; do
+for p in min ffi tls ffi-tls sqlite ffi-tls-sqlite; do
   echo "==> $p"
   TJS_TEST_EXE="$(pwd)/dist/$p/tjs" ./build/tjs test tests/
 done

@@ -247,7 +247,7 @@ artifact runs every test:
 
 ```bash
 TJS_TEST_EXE=$(pwd)/dist/min/tjs ./build/tjs test tests/   # or: mise run test:dist -- min
-mise run test:dist:all                                     # all four published profiles
+mise run test:dist:all                                     # all six published profiles
 ```
 
 The skip filter probes `TJS_TEST_EXE` for its own `tjs.engine.features` *and* `tjs.engine.cli`
@@ -265,7 +265,9 @@ Some tests dlopen a fixture library built next to `tjs` (`libffi-test`, `libsqli
 looked up under `./build` by default. Set **`TJS_TEST_LIBDIR`** when the driver lives elsewhere
 — without it those tests fail loudly rather than skipping. `scripts/build-dist.mjs --host-tjs`
 builds a driver plus those fixtures into `--host-dir` (default `build-host`) as part of a dist
-build, which is how CI gets one:
+build, which is how CI gets one. `libsqlite-test` only exists inside CMakeLists.txt's
+`if(BUILD_WITH_SQLITE)`, so `--host-tjs` turns SQLite on in the *host* tree for the SQLite
+profiles even though the driver itself never uses it:
 
 ```bash
 TJS_TEST_EXE=$(pwd)/dist/min/tjs TJS_TEST_LIBDIR=./build-host ./build-host/tjs test tests/
@@ -346,9 +348,9 @@ is deliberately built and named as a different, non-hardened profile.
 
 Two workflows gate the slim builds, both running the *shipped* binary through the whole suite:
 
-- `.github/workflows/verify.yml` — every push/PR on `slim`, Linux only, 4 profiles. The fast
+- `.github/workflows/verify.yml` — every push/PR on `slim`, Linux only, 6 profiles. The fast
   per-merge signal.
-- `.github/workflows/dist.yml` — 4 profiles × 4 platforms; the `release` job `needs: build`, so
+- `.github/workflows/dist.yml` — 6 profiles × 4 platforms; the `release` job `needs: build`, so
   a profile whose suite fails is never published.
 
 Both build with `--host-tjs` (driver + fixtures into `build-host`) and then run the suite with
