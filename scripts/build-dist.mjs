@@ -72,28 +72,40 @@ const ESBUILD_COMMON = [
 ];
 const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 
-// Per-platform budget for the non-TLS profiles; PROFILE_SIZES adjusts it. Only
-// macOS arm64 has been measured; the others are recorded after the first green
-// CI run (the gate is report-only until --enforce-size).
-const BUDGETS = {
-    'darwin-arm64': { budget: 2097152 },
-    'darwin-x64': { budget: 2097152 },
-    'linux-x64': { budget: 2097152 },
-    'linux-arm64': { budget: 2097152 },
-    // MSVC compiles six of the eleven size/hardening levers out, so Windows
-    // gets its own (larger) budget and an honest profile name -- see the plan.
-    'win32-x64': { budget: 3145728 },
+// Real sizes, measured per platform AND per profile from the green dist.yml run
+// on 2026-08-20 at v26.6.0 (16 cells, all suites passing).
+//
+// A single number per profile does not survive contact with four platforms: the
+// spread across them is larger than the spread across profiles. linux-arm64 is
+// ~265 KB above linux-x64 on the same profile (arm64 PAC/BTI prologues are not
+// free) and MSVC, which compiles six of the eleven size/hardening levers out, is
+// another ~240 KB above that. All four numbers on the old flat 2 MiB budget
+// would have failed for linux-arm64 the moment --enforce-size was turned on.
+const MEASURED = {
+    'linux-x64': { min: 1918920, ffi: 1960328, tls: 2361440, 'ffi-tls': 2402848 },
+    'linux-arm64': { min: 2184240, ffi: 2250080, tls: 2643120, 'ffi-tls': 2708960 },
+    'darwin-arm64': { min: 2008944, ffi: 2059776, tls: 2489504, 'ffi-tls': 2540336 },
+    'win32-x64': { min: 2421248, ffi: 2486784, tls: 2919936, 'ffi-tls': 2984960 },
 };
 
-// Budget adjustment per profile, relative to the `ffi` numbers above, and the
-// macOS arm64 sizes measured on 2026-08-19 at v26.6.0. mbedtls plus the
-// compressed CA bundle is the expensive part; dropping libffi saves ~51 KB.
-const PROFILE_SIZES = {
-    min: { delta: 0, measured: 1976112 },
-    ffi: { delta: 0, measured: 2026944 },
-    tls: { delta: 524288, measured: 2456752 },
-    'ffi-tls': { delta: 524288, measured: 2507584 },
+// Headroom over the measured size before the gate trips. Wide enough that a
+// compiler or dependency bump does not fail a release on noise, tight enough to
+// catch the class of regression that matters: the h3/QUIC + QuickJS merge that
+// cost ~99 KB in one go would still be caught on every profile.
+const SIZE_HEADROOM = 1.05;
+
+// Fallback for platforms with no measurement yet (darwin-x64, Alpine, Android
+// and anything cross-built). Same shape as before: a flat per-platform budget
+// plus a per-profile adjustment for the TLS profiles, where mbedtls and the
+// compressed CA bundle are the expensive part.
+const FALLBACK_BUDGETS = {
+    'darwin-arm64': 2097152,
+    'darwin-x64': 2097152,
+    'linux-x64': 2097152,
+    'linux-arm64': 2097152,
+    'win32-x64': 3145728,
 };
+const FALLBACK_PROFILE_DELTA = { min: 0, ffi: 0, tls: 524288, 'ffi-tls': 524288 };
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -810,22 +822,45 @@ function verifyCompile(bin, smokeFile) {
     log('compile:   ok (standalone binary runs)');
 }
 
+// Prefers the measured platform+profile baseline; falls back to the flat
+// per-platform budget on anything not in MEASURED, so an unmeasured platform
+// still gets a gate rather than none.
+function sizeBudget() {
+    const explicit = Number(opts['max-size']);
+
+    if (explicit) {
+        return { budget: explicit, measured: null, basis: '--max-size' };
+    }
+
+    const measured = MEASURED[platformKey]?.[opts.profile];
+
+    if (measured) {
+        return {
+            budget: Math.round(measured * SIZE_HEADROOM),
+            measured,
+            basis: `measured +${Math.round((SIZE_HEADROOM - 1) * 100)}%`,
+        };
+    }
+
+    return {
+        budget: (FALLBACK_BUDGETS[platformKey] ?? 2097152) + FALLBACK_PROFILE_DELTA[opts.profile],
+        measured: null,
+        basis: `${platformKey} not measured -- fallback budget`,
+    };
+}
+
 function checkSize(bin) {
     const size = fs.statSync(bin).size;
-    const entry = BUDGETS[platformKey] ?? {};
-    const profileSize = PROFILE_SIZES[opts.profile];
-    const budget = Number(opts['max-size'])
-        || (entry.budget ?? 2097152) + profileSize.delta;
+    const { budget, measured, basis } = sizeBudget();
 
     log(`size:      ${fmtBytes(size)}  (budget ${fmtBytes(budget)}, ${platformKey}, `
-        + `${opts.profile})`);
+        + `${opts.profile}, ${basis})`);
 
-    // The recorded baselines are macOS arm64 numbers; skip the note elsewhere.
-    if (platformKey === 'darwin-arm64' && size !== profileSize.measured) {
-        const delta = size - profileSize.measured;
+    if (measured !== null && size !== measured) {
+        const delta = size - measured;
 
         log(`note:      ${delta > 0 ? '+' : ''}${delta} B vs the recorded ${platformKey} `
-            + `${opts.profile} baseline (${profileSize.measured} B)`);
+            + `${opts.profile} baseline (${measured} B)`);
     }
 
     const expect = Number(opts['expect-size']);
