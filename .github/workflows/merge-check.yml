@@ -1,0 +1,121 @@
+name: merge-check
+
+# Dry-runs the upstream merge every day and keeps ONE issue up to date with the
+# conflicted paths. No build, no push -- this is a tripwire, not a gate. It
+# turns "you spent an afternoon on a merge" into a daily one-hunk chore.
+#
+# Both numbers it reports matter. A rising `behind` with zero conflicts is still
+# a signal: it is the merge you should simply do, before it grows teeth.
+
+on:
+  schedule:
+    - cron: '47 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: merge-check
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0          # a merge base cannot be computed from a shallow clone
+          submodules: false       # not needed to compute a merge
+
+      - name: Attempt the merge
+        id: merge
+        run: |
+          set -uo pipefail
+          # Without this the generated bundles conflict on every single run and
+          # the issue becomes noise you learn to ignore. See .gitattributes.
+          sh scripts/setup-repo.sh
+          git config user.name  'merge-check'
+          git config user.email 'merge-check@users.noreply.github.com'
+          git remote add upstream https://github.com/saghul/txiki.js.git
+          git fetch --no-tags upstream master
+
+          echo "behind=$(git rev-list --count HEAD..upstream/master)" >> "$GITHUB_OUTPUT"
+
+          if git merge --no-commit --no-ff upstream/master >/dev/null 2>&1; then
+            echo "conflicts=" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo 'conflicts<<GHA_EOF'
+              git diff --name-only --diff-filter=U
+              echo GHA_EOF
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+          git merge --abort || true
+
+      # One issue, reused: opened when conflicts appear, edited while they
+      # persist, closed when the merge is clean again. A new issue per run
+      # would be a notification firehose that nobody reads.
+      - name: Report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BEHIND: ${{ steps.merge.outputs.behind }}
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE='Upstream merge is conflicted'
+
+          # Created up front, not lazily on the first conflict: `gh issue list
+          # --label` errors out on a label that does not exist yet.
+          gh label create upstream-merge --repo "$REPO" --color d93f0b \
+            --description 'Opened by the merge-check tripwire' 2>/dev/null || true
+
+          existing=$(gh issue list --repo "$REPO" --state open --label upstream-merge \
+            --json number --jq '.[0].number // empty')
+
+          {
+            echo "### $BEHIND upstream commits unmerged"
+            echo
+            if [ -z "$CONFLICTS" ]; then
+              echo 'The dry-run merge is **clean** — no conflicts.'
+            else
+              echo 'The dry-run merge **conflicts** in:'
+              echo
+              echo '```'
+              echo "$CONFLICTS"
+              echo '```'
+              echo
+              echo 'Resolve with `mise run sync:upstream`. Do not hand-resolve'
+              echo '`src/bundles/c/**` — it is regenerated, and `scripts/setup-repo.sh`'
+              echo 'should have kept it out of this list entirely.'
+            fi
+            echo
+            echo "_Updated by [merge-check]($RUN_URL)._"
+          } > body.md
+
+          {
+            echo "### merge-check"
+            echo
+            echo "behind: **$BEHIND** — conflicts: **${CONFLICTS:-none}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$CONFLICTS" ]; then
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" --repo "$REPO" --body-file body.md
+              echo "updated issue #$existing"
+            else
+              gh issue create --repo "$REPO" --title "$TITLE" \
+                --label upstream-merge --body-file body.md
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" \
+              --body "The upstream merge is clean again ($BEHIND commits behind). Closing."
+            gh issue close "$existing" --repo "$REPO"
+            echo "closed issue #$existing"
+          else
+            echo "clean, nothing to report"
+          fi
