@@ -1,0 +1,95 @@
+---
+sidebar_position: 3
+title: Slim builds
+---
+
+# Slim builds
+
+This fork adds build-time options on top of the ones documented in
+[Building](./building.md). They fall into two groups: options that **remove a feature**
+(smaller binary, smaller API surface) and options that only change **how the code is compiled
+and linked** (smaller binary, same features).
+
+All of them live in `cmake/slim.cmake`; `CMakeLists.txt` only includes it.
+
+## Optional features
+
+| CMake option                | Default | Effect                                       | Approx savings |
+|-----------------------------|---------|----------------------------------------------|----------------|
+| `BUILD_WITH_TLS=OFF`        | ON      | Remove TLS (HTTPS/WSS/TLSSocket)             | ~0.3–0.5 MB    |
+| `BUILD_WITH_FFI=OFF`        | ON      | Remove libffi and the `tjs:ffi` module       | ~50 KB         |
+| `BUILD_WITH_BUNDLED_CA=OFF` | ON      | Drop the embedded Mozilla CA bundle          | ~105 KB        |
+| `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | ~165 KB        |
+| `BUILD_WITH_MIMALLOC=OFF`   | ON      | Use the system allocator instead of mimalloc | varies         |
+
+When TLS is disabled, plain HTTP/WS and TCP/UDP still work, but `https://` / `wss://` requests
+and `TLSSocket`/`TLSServerSocket` throw "TLS not supported in this build"; the Web Crypto API
+(`crypto.subtle`) is unaffected since it links `libmbedcrypto` independently.
+
+`BUILD_WITH_BUNDLED_CA=OFF` applies to TLS builds only and removes the embedded Mozilla CA
+bundle. Certificate verification then requires an explicit bundle via the `TJS_CA_BUNDLE`
+environment variable or `tjs.setCABundlePath()`; without one, HTTPS/WSS and `TLSSocket` fail
+verification with a clear error rather than silently trusting anything. Note this does **not**
+fall back to the operating system trust store: libwebsockets implements
+`LWS_SSL_CLIENT_USE_OS_CA_CERTS` only for its OpenSSL and SChannel backends, and txiki.js
+always builds it against mbedTLS.
+
+`BUILD_WITH_WEBCRYPTO=OFF` removes `crypto.subtle`. This **breaks WinterTC compliance** and is
+intended for size-constrained embedded profiles only; `crypto.getRandomValues()` and
+`crypto.randomUUID()` keep working. It also breaks `tjs app pack` and `tjs app compile`, which
+hash the package with `crypto.subtle.digest()`.
+
+The active set of feature flags is exposed to JS via `tjs.engine.features`: `wasm`, `sqlite`,
+`tls`, `bundledCa`, `webcrypto` and `ffi`.
+
+Unix/macOS example:
+
+```bash
+BUILD_WITH_TLS=OFF make
+```
+
+Direct CMake example (the flags can be combined with upstream's `BUILD_WITH_WASM` /
+`BUILD_WITH_SQLITE`):
+
+```bash
+cmake -B build-slim -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_WITH_WASM=OFF -DBUILD_WITH_SQLITE=OFF -DBUILD_WITH_TLS=OFF
+cmake --build build-slim
+```
+
+## Size-optimized builds
+
+These remove no feature; they change codegen and linking only, and are independent of one
+another.
+
+| CMake option                        | Default | Effect                                                                        |
+|-------------------------------------|---------|-------------------------------------------------------------------------------|
+| `BUILD_WITH_OZ=ON`                  | OFF     | Use Clang's `-Oz` (more aggressive than `-Os`) in MinSizeRel builds           |
+| `BUILD_WITH_HIDDEN_VISIBILITY=ON`   | OFF     | Compile with `-fvisibility=hidden` so the linker/LTO can prune more           |
+| `BUILD_WITH_ICF=ON`                 | OFF     | Identical-code folding at link (lld/gold; ELF only)                           |
+| `BUILD_WITH_COMPRESSED_BYTECODE=ON` | OFF     | Deflate the embedded JS bytecode, inflated lazily at load                     |
+| `BUILD_WITH_REPRODUCIBLE_PATHS=ON`  | OFF     | Remap `__FILE__`/debug paths so absolute source paths are not embedded        |
+| `BUILD_WITH_HARDENING=ON`           | OFF     | Exploit-mitigation flags (stack protector, zero-init, FORTIFY, arm64 PAC/BTI) |
+
+Notes:
+
+- `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
+  MinSizeRel flags). Under GCC it warns and keeps `-Os`. `-Oz` can slow hot paths.
+- `BUILD_WITH_HIDDEN_VISIBILITY` hides non-exported symbols (`-fvisibility-inlines-hidden` is added
+  for C++). FFI `dlopen` and SQLite loadable extensions are unaffected (loaded modules are
+  self-contained).
+- `BUILD_WITH_ICF` needs lld or gold and folds at `--icf=safe`. It is skipped on Apple ld64 (which
+  has no `--icf`, but already gets `-Wl,-dead_strip` from `BUILD_WITH_GC_SECTIONS`) and on MSVC
+  (which folds via `/OPT:ICF`).
+- `BUILD_WITH_COMPRESSED_BYTECODE` **must** be paired with `tjsc -z` when generating the bundles
+  (`make js TJSC_COMPRESS=-z`). The two settings encode and decode the same format, so enabling
+  one without the other makes the loader inflate garbage.
+- `BUILD_WITH_HIDDEN_VISIBILITY`, `BUILD_WITH_REPRODUCIBLE_PATHS`, `BUILD_WITH_HARDENING` and
+  `BUILD_WITH_NO_UNWIND_TABLES` are all skipped on MSVC, where the underlying compiler flags do
+  not exist. A Windows/MSVC build is therefore neither hardened nor as small as a Clang/GCC one.
+
+:::warning[Experimental]
+`BUILD_WITH_NO_UNWIND_TABLES=ON` drops the async unwind / `.eh_frame` tables used for crash and
+signal backtraces. C++ exception unwinding still works, but crash backtraces will be unusable.
+It is off by default; verify your signal/error paths before enabling it.
+:::

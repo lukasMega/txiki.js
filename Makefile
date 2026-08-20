@@ -19,47 +19,17 @@ STDLIB_MODULES=$(wildcard src/js/stdlib/*.js)
 ESBUILD?=npx esbuild
 ESBUILD_PARAMS_COMMON=--target=esnext --platform=neutral --format=esm --main-fields=main,module
 ESBUILD_PARAMS_MINIFY=--minify --keep-names
-# Optional bytecode compression: pass -z to tjsc so embedded bytecode is
-# deflated with miniz. Empty by default (no compression). The build:smallest*
-# tasks set TJSC_COMPRESS=-z together with -DBUILD_WITH_COMPRESSED_BYTECODE=ON.
-# Threaded through every tjsc rule via TJSC_PARAMS_STIP below.
-TJSC_COMPRESS?=
-TJSC_PARAMS_STIP=-s $(TJSC_COMPRESS)
+TJSC_PARAMS_STIP=-s
 JS_NO_STRIP?=0
 
 ifeq ($(JS_NO_STRIP),1)
 	ESBUILD_PARAMS_MINIFY=
-	TJSC_PARAMS_STIP=$(TJSC_COMPRESS)
+	TJSC_PARAMS_STIP=
 endif
 
-# CLI subcommand/option gating for the run-main bundle. All default to true
-# (full CLI). The untracked slim.sh wrapper overrides this on the command line
-# (make RUN_MAIN_DEFINES="...") to compile commands out via esbuild dead-code
-# elimination. See .claude/plans/2026-06-17_cli-command-removal.md.
-RUN_MAIN_DEFINES ?= \
-	--define:__TJS_EVAL__=true \
-	--define:__TJS_SERVE__=true \
-	--define:__TJS_BUNDLER__=true \
-	--define:__TJS_TEST_RUNNER__=true \
-	--define:__TJS_COMPILE__=true \
-	--define:__TJS_APP__=true \
-	--define:__TJS_HELP__=true \
-	--define:__TJS_TLS_CA__=true
-
-# Same dead-code-elimination pattern as RUN_MAIN_DEFINES, applied to the
-# polyfills bundle. All default to true (full build unchanged). See
-# .claude/plans/2026-06-18_binary-size-reduction-3.md (lever L5).
-#
-# NOTE: a __TJS_URLPATTERN__ define was tried and dropped -- the
-# urlpattern-polyfill npm package's default entry point has an unconditional
-# top-level side effect (auto-installs onto globalThis) and its package.json
-# doesn't declare "sideEffects": false, so esbuild's tree-shaking treats it as
-# unremovable regardless of whether the binding is used. Measured saving was
-# ~70 bytes (noise) vs. the ~4.8 KB for XHR below, not worth the complexity.
-POLYFILLS_DEFINES ?= \
-	--define:__TJS_XHR__=true
-
 all: $(TJS)
+
+-include slim.mk
 
 $(BUILD_DIR)/CMakeCache.txt:
 	cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILDTYPE) -DBUILD_WITH_MIMALLOC=$(MIMALLOC)
@@ -76,8 +46,6 @@ src/bundles/js/core/polyfills.js: src/js/polyfills/*.js src/js/polyfills/**/*.js
 		--metafile=$@.json \
 		--outfile=$@ \
 		--external:tjs:* \
-		--minify-syntax \
-		$(POLYFILLS_DEFINES) \
 		$(ESBUILD_PARAMS_MINIFY) \
 		$(ESBUILD_PARAMS_COMMON)
 
@@ -114,8 +82,6 @@ src/bundles/js/core/run-main.js: src/js/run-main/*.js
 		--metafile=$@.json \
 		--outfile=$@ \
 		--external:tjs:* \
-		--minify-syntax \
-		$(RUN_MAIN_DEFINES) \
 		$(ESBUILD_PARAMS_MINIFY) \
 		$(ESBUILD_PARAMS_COMMON)
 
