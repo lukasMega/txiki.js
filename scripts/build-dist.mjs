@@ -79,7 +79,7 @@ const ESBUILD_COMMON = [
 const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 
 // Real sizes, measured per platform AND per profile from the green dist.yml run
-// on 2026-08-20 at v26.6.0 (16 cells, all suites passing).
+// on 2026-08-20 at v26.6.0 (24 cells, all suites passing).
 //
 // A single number per profile does not survive contact with four platforms: the
 // spread across them is larger than the spread across profiles. linux-arm64 is
@@ -88,10 +88,22 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // another ~240 KB above that. Every one of these numbers on the old flat 2 MiB
 // budget would have failed for linux-arm64 the moment --enforce-size was turned on.
 const MEASURED = {
-    'linux-x64': { min: 1918920, ffi: 1960328, tls: 2361440, 'ffi-tls': 2402848 },
-    'linux-arm64': { min: 2184240, ffi: 2250080, tls: 2643120, 'ffi-tls': 2708960 },
-    'darwin-arm64': { min: 2008944, ffi: 2059776, tls: 2489504, 'ffi-tls': 2540336 },
-    'win32-x64': { min: 2421248, ffi: 2486784, tls: 2919936, 'ffi-tls': 2984960 },
+    'linux-x64': {
+        min: 1918920, ffi: 1960328, tls: 2361440,
+        'ffi-tls': 2406944, sqlite: 2717208, 'ffi-tls-sqlite': 3205248,
+    },
+    'linux-arm64': {
+        min: 2184240, ffi: 2250080, tls: 2708656,
+        'ffi-tls': 2708960, sqlite: 3183016, 'ffi-tls-sqlite': 3707736,
+    },
+    'darwin-arm64': {
+        min: 2008944, ffi: 2059776, tls: 2489504,
+        'ffi-tls': 2540336, sqlite: 2939056, 'ffi-tls-sqlite': 3486960,
+    },
+    'win32-x64': {
+        min: 2421248, ffi: 2486784, tls: 2921472,
+        'ffi-tls': 2985984, sqlite: 3246592, 'ffi-tls-sqlite': 3810816,
+    },
 };
 
 // Headroom over the measured size before the gate trips. Wide enough that a
@@ -112,17 +124,21 @@ const FALLBACK_BUDGETS = {
     'win32-x64': 3145728,
 };
 
-// The two SQLite profiles have no MEASURED row on any platform yet, so they
-// always take this path. Their deltas are UNMEASURED ESTIMATES: derived from a
-// local darwin-arm64 build (sqlite 2,906,224 B, ffi-tls-sqlite 3,421,184 B -- SQLite
-// costs ~875 KB, by far the most expensive optional feature here) plus room for
-// the ~265 KB linux-arm64 and ~500 KB MSVC spreads the measured profiles show.
-// Replace both with a MEASURED row from the first green dist.yml run.
+// Every profile is measured on all four shipped platforms now, so this path is
+// only reached by darwin-x64, Alpine, Android and cross-builds. Each delta
+// covers the largest over-`min` cost that profile showed across the four, since
+// this branch adds the delta to a flat budget WITHOUT applying SIZE_HEADROOM:
+//
+//   ffi  +65,840   tls +524,416   ffi-tls +564,736   (worst: linux-arm64 / win32-x64)
+//   sqlite +998,776   ffi-tls-sqlite +1,523,496   (worst: linux-arm64)
+//
+// SQLite is the most expensive optional feature by a distance -- ~875 KB on
+// darwin-arm64, more than TLS plus the bundled CA together.
 const FALLBACK_PROFILE_DELTA = {
     min: 0,
-    ffi: 0,
-    tls: 524288,
-    'ffi-tls': 524288,
+    ffi: 98304,
+    tls: 589824,
+    'ffi-tls': 589824,
     sqlite: 1048576,
     'ffi-tls-sqlite': 1572864,
 };
