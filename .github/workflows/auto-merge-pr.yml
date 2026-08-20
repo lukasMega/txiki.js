@@ -2,21 +2,18 @@ name: auto-merge-pr
 
 # Proposes the upstream merge as a PR. It never pushes to `slim`.
 #
-# This is deliberately the weak version of "automate the merge". `sync-upstream`
-# is safe because the REST merge-upstream endpoint refuses to act on a diverged
-# branch; `slim` is diverged by design, so nothing here has that backstop. A
-# textually clean merge can still be semantically wrong -- e.g. upstream renames
-# a file that `tjs_slim_configure_core()` removes from the target, which is
-# *designed* to hard-error at configure time, i.e. after the merge commit would
-# already exist. So the merge commit is only ever offered on a branch, and
-# `verify.yml` (which fires on `pull_request: branches: [slim]` already) decides
-# whether it is fit to land. A human clicks merge.
+# Deliberately the weak version. `sync-upstream` is safe because the REST
+# merge-upstream endpoint refuses to act on a diverged branch, and `slim` is
+# diverged by design -- nothing here has that backstop. A textually clean merge
+# can still be semantically wrong (upstream renaming a file that
+# `tjs_slim_configure_core()` removes hard-errors at configure time, i.e. after
+# the merge commit exists), so the commit is only ever offered on a branch and
+# `verify.yml` decides whether it can land. A human clicks merge.
 #
-# Third step in the daily chain: sync-upstream (04:30) -> merge-check (05:47) ->
-# auto-merge-pr (06:15). It recomputes `behind` and the dry-run rather than
-# reading merge-check's outputs: workflow outputs do not cross workflow runs,
-# and a gate that silently reuses a stale answer is worse than one that costs an
-# extra `git merge --no-commit`.
+# Third in the daily chain: sync-upstream (04:30) -> merge-check (05:47) ->
+# auto-merge-pr (06:15). It recomputes `behind` and the dry-run because workflow
+# outputs do not cross runs, and a stale answer is worse than a spare
+# `git merge --no-commit`.
 
 on:
   schedule:
@@ -39,8 +36,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
-      # mise.toml pins `ubi:saghul/txiki.js`, for which upstream publishes no
-      # Linux asset; `mise run` would die installing a binary this job never uses.
+      # `mise run` installs every tool in mise.toml first, and upstream publishes
+      # no Linux asset for the `ubi:saghul/txiki.js` pin.
       MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
     steps:
       - uses: actions/checkout@v7
@@ -53,9 +50,8 @@ jobs:
         id: gate
         run: |
           set -euo pipefail
-          # FIRST, always: without the merge drivers the generated bundles
-          # content-merge silently, and a three-way text merge of a QuickJS
-          # bytecode array is wrong output with no conflict to warn you.
+          # FIRST, always: without the merge drivers a three-way text merge of a
+          # QuickJS bytecode array is wrong output with no conflict to warn you.
           sh scripts/setup-repo.sh
           git config user.name  'auto-merge-pr'
           git config user.email 'auto-merge-pr@users.noreply.github.com'
@@ -70,8 +66,8 @@ jobs:
             exit 0
           fi
 
-          # One open proposal at a time. A second PR for the same merge would
-          # just be a stale duplicate the moment the first one lands.
+          # One open proposal at a time: a second PR for the same merge is a
+          # stale duplicate the moment the first lands.
           open_pr=$(gh pr list --repo "$REPO" --base slim --state open \
             --json number,headRefName \
             --jq '[.[] | select(.headRefName | startswith("chore/upstream-merge-"))][0].number // empty')
@@ -101,11 +97,9 @@ jobs:
         if: steps.gate.outputs.proceed == 'true'
         run: npm install --ignore-scripts
 
-      # The merge is left uncommitted so that `make js` output lands *in* the
-      # merge commit. Regenerating afterwards, in a follow-up commit, is the
-      # mistake this ordering exists to prevent: `make js` reads src/js/**, so it
-      # must run after the last merged edit there, and CI's codegen job fails on
-      # a merge commit whose bundles disagree with their sources.
+      # Left uncommitted so `make js` output lands *in* the merge commit: it
+      # reads src/js/**, so it must run after the last merged edit there, and
+      # codegen fails on a merge commit whose bundles disagree with sources.
       - name: Merge upstream and regenerate the bundles
         if: steps.gate.outputs.proceed == 'true'
         id: merge
@@ -149,7 +143,7 @@ jobs:
 
           Before merging, check that:
 
-          - `verify.yml` is green on all four profiles — it is the gate, not this workflow.
+          - `verify.yml` is green on all six profiles — it is the gate, not this workflow.
           - `src/bundles/c/**` in the diff is regenerated output, not a text merge. If the
             merge drivers had not been registered this diff would be silently wrong; the job
             runs `scripts/setup-repo.sh` first for exactly that reason.
@@ -162,10 +156,10 @@ jobs:
             --body-file pr-body.md)
           echo "::notice::$url"
 
-          # NOT enabled: `gh pr merge --auto --merge`. That would land the merge on
-          # `slim` unattended, and it is only defensible once (a) branch protection
-          # on `slim` requires verify's four contexts plus codegen -- without
-          # protection `--auto` merges on nothing -- and (b) the per-merge signal
-          # covers the platforms we ship. It is Linux-only today (see
-          # .claude/plans/2026-08-20_fork-deferred-c2-c3-c4.md, C2), so enabling
-          # --auto is a decision to accept Windows/macOS regressions on `slim`.
+          # NOT enabled: `gh pr merge --auto --merge`, which would land the merge
+          # on `slim` unattended. Its first precondition is now met -- branch
+          # protection requires verify's six profiles plus Lint and Codegen
+          # (2026-08-20), where before it would have merged on nothing. The
+          # second is not: the per-merge signal is Linux-only (C2 in
+          # .claude/plans/2026-08-20_fork-deferred-c2-c3-c4.md), so --auto is
+          # still a decision to accept Windows/macOS regressions on `slim`.

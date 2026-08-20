@@ -31,15 +31,21 @@ const require = createRequire(import.meta.url);
 // Profile definition
 // ---------------------------------------------------------------------------
 
-// The four published feature sets. Everything else (WASM, SQLite, mimalloc,
-// most CLI subcommands) is off in all of them; these only differ in FFI and
-// TLS, which are the two features that cost real size. Each maps 1:1 onto a
-// `dist:*` mise task and onto a `slim-<key>-v*` release tag.
+// The published feature sets. Everything else (WASM, mimalloc, most CLI
+// subcommands) is off in all of them; these differ only in FFI, TLS and SQLite,
+// the three features that cost real size. Each maps 1:1 onto a `dist:*` mise
+// task and onto a `slim-<key>-v*` release tag.
+//
+// Deliberately not the full 2^3: the profile count multiplies straight into
+// dist.yml's platform matrix. SQLite gets the floor (`sqlite`) and the widest
+// (`ffi-tls-sqlite`); the four combinations in between are a local build away.
 const PROFILES = {
-    min: { ffi: false, tls: false },
-    ffi: { ffi: true, tls: false },
-    tls: { ffi: false, tls: true },
-    'ffi-tls': { ffi: true, tls: true },
+    min: { ffi: false, tls: false, sqlite: false },
+    ffi: { ffi: true, tls: false, sqlite: false },
+    tls: { ffi: false, tls: true, sqlite: false },
+    sqlite: { ffi: false, tls: false, sqlite: true },
+    'ffi-tls': { ffi: true, tls: true, sqlite: false },
+    'ffi-tls-sqlite': { ffi: true, tls: true, sqlite: true },
 };
 
 // CLI subcommand gating, applied to the run-main bundle via esbuild --define.
@@ -79,8 +85,8 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // spread across them is larger than the spread across profiles. linux-arm64 is
 // ~265 KB above linux-x64 on the same profile (arm64 PAC/BTI prologues are not
 // free) and MSVC, which compiles six of the eleven size/hardening levers out, is
-// another ~240 KB above that. All four numbers on the old flat 2 MiB budget
-// would have failed for linux-arm64 the moment --enforce-size was turned on.
+// another ~240 KB above that. Every one of these numbers on the old flat 2 MiB
+// budget would have failed for linux-arm64 the moment --enforce-size was turned on.
 const MEASURED = {
     'linux-x64': { min: 1918920, ffi: 1960328, tls: 2361440, 'ffi-tls': 2402848 },
     'linux-arm64': { min: 2184240, ffi: 2250080, tls: 2643120, 'ffi-tls': 2708960 },
@@ -105,7 +111,21 @@ const FALLBACK_BUDGETS = {
     'linux-arm64': 2097152,
     'win32-x64': 3145728,
 };
-const FALLBACK_PROFILE_DELTA = { min: 0, ffi: 0, tls: 524288, 'ffi-tls': 524288 };
+
+// The two SQLite profiles have no MEASURED row on any platform yet, so they
+// always take this path. Their deltas are UNMEASURED ESTIMATES: derived from a
+// local darwin-arm64 build (sqlite 2,906,224 B, ffi-tls-sqlite 3,421,184 B -- SQLite
+// costs ~875 KB, by far the most expensive optional feature here) plus room for
+// the ~265 KB linux-arm64 and ~500 KB MSVC spreads the measured profiles show.
+// Replace both with a MEASURED row from the first green dist.yml run.
+const FALLBACK_PROFILE_DELTA = {
+    min: 0,
+    ffi: 0,
+    tls: 524288,
+    'ffi-tls': 524288,
+    sqlite: 1048576,
+    'ffi-tls-sqlite': 1572864,
+};
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -228,7 +248,7 @@ if (opts.help) {
     process.stdout.write(`Usage: node scripts/build-dist.mjs [options]
 
   --profile <name>      Feature set to build: ${Object.keys(PROFILES).join(', ')}
-                        (default: ffi). They differ only in FFI and TLS.
+                        (default: ffi). They differ only in FFI, TLS and SQLite.
   --ref <git-ref>       Clone --repo at this ref into --workdir and build that
                         instead of the current checkout.
   --repo <url>          Repository to clone (default: our fork).
@@ -378,7 +398,13 @@ function buildHostTjsc() {
         '-S', root,
         '-DCMAKE_BUILD_TYPE=Release',
         '-DBUILD_WITH_WASM=OFF',
-        '-DBUILD_WITH_SQLITE=OFF',
+        // tjsc alone never needs SQLite. --host-tjs does: it builds this tree's
+        // default target for the test fixtures, and CMakeLists.txt only defines
+        // the `sqlite-test` shared library (which tests/test-sqlite.js
+        // loadExtension()s out of TJS_TEST_LIBDIR) inside `if(BUILD_WITH_SQLITE)`.
+        // Without it the sqlite tests fail loudly on a `sqlite` profile instead
+        // of running.
+        `-DBUILD_WITH_SQLITE=${opts['host-tjs'] && features.sqlite ? 'ON' : 'OFF'}`,
         '-DBUILD_WITH_TLS=OFF',
         '-DBUILD_WITH_FFI=OFF',
         '-DBUILD_WITH_MIMALLOC=OFF',
@@ -614,7 +640,7 @@ function buildTjs() {
     const flags = [
         '-DCMAKE_BUILD_TYPE=MinSizeRel',
         '-DBUILD_WITH_WASM=OFF',
-        '-DBUILD_WITH_SQLITE=OFF',
+        `-DBUILD_WITH_SQLITE=${features.sqlite ? 'ON' : 'OFF'}`,
         `-DBUILD_WITH_TLS=${features.tls ? 'ON' : 'OFF'}`,
         `-DBUILD_WITH_FFI=${features.ffi ? 'ON' : 'OFF'}`,
         '-DBUILD_WITH_MIMALLOC=OFF',
@@ -686,7 +712,6 @@ check(typeof XMLHttpRequest === 'function', 'XMLHttpRequest missing');
 // Common to every profile.
 check(typeof WebAssembly === 'undefined', 'WebAssembly should be compiled out');
 check(tjs.engine.features.wasm === false, 'features.wasm should be false');
-check(tjs.engine.features.sqlite === false, 'features.sqlite should be false');
 
 // WebCrypto is on in this profile. Assert the capability, not the feature
 // flag: tjs.engine.features.webcrypto only exists on builds that carry the
@@ -761,11 +786,44 @@ check(tjs.engine.features.tls === false, 'features.tls should be false');
 check(tjs.engine.features.bundledCa === false, 'features.bundledCa should be false');
 `;
 
+// language=JavaScript
+const SMOKE_SQLITE = `
+import { Database } from 'tjs:sqlite';
+
+check(tjs.engine.features.sqlite === true, 'features.sqlite should be true');
+
+// Exercise the amalgamation, not just the flag: an in-memory round trip is the
+// cheapest proof that deps/sqlite3 was actually linked in and works.
+const db = new Database(':memory:');
+
+db.exec('CREATE TABLE t (n INT)');
+
+const ins = db.prepare('INSERT INTO t VALUES (?)');
+
+ins.run(41);
+ins.finalize();
+
+const sel = db.prepare('SELECT n FROM t');
+const rows = sel.all();
+
+sel.finalize();
+check(rows.length === 1 && rows[0].n === 41, 'sqlite round trip broken');
+db.close();
+`;
+
+// language=JavaScript
+const SMOKE_NO_SQLITE = `
+// Mirror image of SMOKE_SQLITE: the point of this pair is that a silently
+// flipped BUILD_WITH_SQLITE default fails the build, in either direction.
+check(tjs.engine.features.sqlite === false, 'features.sqlite should be false');
+`;
+
 function smokeSource() {
     return [
         SMOKE_COMMON,
         features.ffi ? SMOKE_FFI : SMOKE_NO_FFI,
         features.tls ? SMOKE_TLS : SMOKE_NO_TLS,
+        features.sqlite ? SMOKE_SQLITE : SMOKE_NO_SQLITE,
         'console.log(\'smoke: ok\');\n',
     ].join('\n');
 }
@@ -910,7 +968,7 @@ function packageArtifact(bin, size) {
         [
             `profile:  ${profile}`,
             `features: ffi=${features.ffi} tls=${features.tls} `
-                + 'wasm=false sqlite=false webcrypto=true',
+                + `sqlite=${features.sqlite} wasm=false webcrypto=true`,
             `platform: ${platformKey}`,
             `size:     ${size}`,
             `sha256:   ${digest}`,

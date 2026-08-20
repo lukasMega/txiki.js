@@ -1,17 +1,11 @@
 name: Dist (slim binaries)
 
-# Builds every published slim `tjs` profile on every supported platform via the
-# portable Node driver (scripts/build-dist.mjs), runs the full test suite
-# against each built binary, then puts all of them on one Release. A profile
-# whose suite fails is never published. The size gate is enforced on tag builds
-# and report-only elsewhere, so a legitimate growth shows up in the job summary
-# on a PR instead of blocking it.
+# Every profile x platform, each running the full suite before anything is
+# published (`release` needs: build). The size gate is tag-only so a legitimate
+# growth lands in a PR job summary instead of blocking it.
 #
-# Profiles (--profile): min, ffi, tls, ffi-tls. They differ only in FFI and TLS;
-# all four are MinSizeRel + compressed bytecode + slim CLI, and keep WebCrypto,
-# `run`, the REPL and `compile`. Unix builds are additionally hardened; MSVC
-# compiles the hardening and most size levers out, so those artifacts are named
-# without the "-hardened" suffix and get a larger size budget.
+# A profile added here costs four jobs, which is why SQLite ships as two
+# profiles (the floor and the widest) rather than doubling the existing four.
 
 on:
   workflow_dispatch:
@@ -31,23 +25,23 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
-      # One tag publishes all four profiles as assets of a single Release. The
-      # per-profile spellings are accepted too, so `slim-tls-v1.2.3` works and
-      # simply names the profile someone cares about.
+      # One tag publishes every profile; the per-profile spellings are accepted
+      # too and simply name the profile someone cares about.
       - "slim-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-min-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-ffi-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-tls-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-sqlite-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-ffi-tls-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-ffi-tls-sqlite-v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
     paths:
       - 'scripts/build-dist.mjs'
       - '.github/workflows/dist.yml'
       - 'CMakeLists.txt'
 
-# Cancellation is guarded on the event rather than a flat `true`: the `release`
-# job uploads assets, so a second tag push must never cancel a publish in
-# flight. Only PR runs are superseded.
+# Guarded on the event, not a flat `true`: `release` uploads assets, so a second
+# tag push must never cancel a publish in flight.
 concurrency:
   group: dist-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -60,29 +54,26 @@ jobs:
     strategy:
       fail-fast: false
       # Two axes, not `include`: an include entry whose keys are absent from the
-      # matrix is merged into every combination (last one winning) instead of
-      # multiplying out, which would silently build one platform four times.
+      # matrix is merged into every combination instead of multiplying out.
       matrix:
-        profile: [ min, ffi, tls, ffi-tls ]
+        profile: [ min, ffi, tls, ffi-tls, sqlite, ffi-tls-sqlite ]
         target:
           - { name: linux-x86_64, os: ubuntu-latest }
           - { name: linux-arm64, os: ubuntu-24.04-arm }
           - { name: macos-arm64, os: macos-15 }
           - { name: windows-x86_64, os: windows-latest }
     env:
-      # mise.toml pins `ubi:saghul/txiki.js` for local use, and upstream publishes
-      # no Linux asset for it. `mise run` installs every tool in the config before
-      # running a task, so without this the Linux jobs die installing a binary the
-      # build never uses.
+      # `mise run` installs every tool in mise.toml first, and upstream publishes
+      # no Linux asset for the `ubi:saghul/txiki.js` pin -- the Linux jobs would
+      # die installing a binary the build never uses.
       MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      # Unix uses mise (mise.toml pins node and owns the `dist` task, so CI and
-      # local dev run the exact same command). Windows keeps setup-node: the
-      # mise task shell is POSIX sh, which the Windows runner does not have.
+      # Windows keeps setup-node: the mise task shell is POSIX sh, which the
+      # Windows runner does not have.
       - name: Setup mise (Unix)
         if: runner.os != 'Windows'
         uses: jdx/mise-action@v3
@@ -100,9 +91,9 @@ jobs:
           sudo apt update
           sudo apt install -y libffi-dev
 
-      # Set up for every Windows profile, not just the FFI ones: the build step
-      # always passes the vcpkg toolchain file, which must exist even when the
-      # only package it provides (libffi) is not installed.
+      # Every Windows profile, not just the FFI ones: the build step always
+      # passes the vcpkg toolchain file, which must exist even when libffi
+      # (the only package it provides) is not installed.
       - name: Setup vcpkg (Windows)
         if: runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
@@ -116,13 +107,13 @@ jobs:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         run: vcpkg install libffi:x64-windows-static
 
-      # esbuild is resolved from node_modules by the build script; `npx esbuild`
-      # is deliberately not used (network per run, version-unstable bundles).
+      # esbuild comes from node_modules, not `npx` (network per run, and
+      # version-unstable bundles).
       - name: Install npm dependencies
         run: npm install --ignore-scripts
 
-      # --host-tjs also builds the full-CLI driver and the test fixture
-      # libraries in build-host; the artifact cannot run the suite itself.
+      # --host-tjs also builds the full-CLI driver and the test fixtures into
+      # build-host; the artifact cannot run the suite itself.
       - name: Build (Unix)
         if: runner.os != 'Windows'
         run: >-
@@ -139,12 +130,10 @@ jobs:
           "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
         if: runner.os == 'Windows'
 
-      # Nothing is published until the shipped binary has run the whole suite
-      # (the `release` job needs: build). The artifact's own `test` subcommand
-      # is compiled out, so the host driver runs the loop and TJS_TEST_EXE
-      # points every test file at the artifact; the skip filter probes the
-      # artifact, so the tallies below describe it and not the driver.
-      # TJS_TEST_LIBDIR sends the FFI/SQLite fixture lookups to the same tree.
+      # The artifact's `test` subcommand is compiled out, so the host driver runs
+      # the loop and TJS_TEST_EXE points every test file at the artifact. The
+      # skip filter probes the artifact, so the tallies describe it, not the
+      # driver; TJS_TEST_LIBDIR sends fixture lookups to the same tree.
       - name: Test the artifact
         shell: bash
         env:
@@ -159,9 +148,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          # printf, not \x1b: that spelling is GNU-sed-only, and on the Windows
-          # runner (git-bash) a sed that quietly matches nothing would leave the
-          # tallies at zero -- which reads as "clean".
+          # printf, not \x1b: that spelling is GNU-sed-only, and a sed matching
+          # nothing would leave the tallies at zero -- which reads as "clean".
           esc=$(printf '\033')
           sed "s/${esc}\[[0-9;]*m//g" test-output.txt > test-plain.txt || : > test-plain.txt
           count() { grep -cE "[[:space:]]$1\$" test-plain.txt || true; }
@@ -188,14 +176,9 @@ jobs:
           name: txiki-slim-${{ matrix.profile }}-${{ matrix.target.name }}
           path: dist
 
-  # Publishes the slim binaries under Releases. Runs on any pushed tag matched
-  # above, or on a manual run that supplied `release_tag` (the tag is then
-  # created on the checked-out commit by the release action).
-  #
-  # All four profiles land on one Release as
-  # txiki-slim-<profile>-<platform>.zip. The `txiki-slim-` prefix also keeps them
-  # from colliding with the upstream release.yml assets (`txiki-<platform>.zip`),
-  # which target the same `v*` tags and would otherwise overwrite each other.
+  # Every profile lands on one Release as txiki-slim-<profile>-<platform>.zip.
+  # The `txiki-slim-` prefix keeps them from colliding with upstream
+  # release.yml's `txiki-<platform>.zip`, which targets the same `v*` tags.
   release:
     name: release
     needs: build
@@ -216,8 +199,7 @@ jobs:
           : > SHA256SUMS.txt
           for dir in */; do
             name="${dir%/}"
-            # actions/upload-artifact strips the executable bit; restore it
-            # before zipping (Info-ZIP preserves Unix permissions).
+            # upload-artifact strips the executable bit; Info-ZIP preserves it.
             [ -f "${dir}tjs" ] && chmod +x "${dir}tjs"
             awk -v d="$name" '{ print $1 "  " d "/" $2 }' "${dir}SHA256SUMS" >> SHA256SUMS.txt
             zip -r "${name}.zip" "$dir"
@@ -227,24 +209,28 @@ jobs:
       - name: Release notes
         run: |
           {
-            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`), four feature"
+            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`), six feature"
             echo "profiles x four platforms."
             echo
-            echo "| profile | FFI (\`tjs:ffi\`) | TLS (HTTPS/WSS/TLSSocket) |"
-            echo "| --- | --- | --- |"
-            echo "| \`min\`     | no  | no  |"
-            echo "| \`ffi\`     | yes | no  |"
-            echo "| \`tls\`     | no  | yes (bundled CA) |"
-            echo "| \`ffi-tls\` | yes | yes (bundled CA) |"
+            echo "| profile | FFI (\`tjs:ffi\`) | TLS (HTTPS/WSS/TLSSocket) | SQLite (\`tjs:sqlite\`) |"
+            echo "| --- | --- | --- | --- |"
+            echo "| \`min\`            | no  | no               | no  |"
+            echo "| \`ffi\`            | yes | no               | no  |"
+            echo "| \`tls\`            | no  | yes (bundled CA) | no  |"
+            echo "| \`sqlite\`         | no  | no               | yes |"
+            echo "| \`ffi-tls\`        | yes | yes (bundled CA) | no  |"
+            echo "| \`ffi-tls-sqlite\` | yes | yes (bundled CA) | yes |"
             echo
-            echo "All four: MinSizeRel, compressed bytecode, hardened (except MSVC,"
-            echo "which compiles those levers out), no WebAssembly, no SQLite, no"
+            echo "\`localStorage\` is persistent only on the SQLite profiles; the"
+            echo "others fall back to an in-memory store."
+            echo
+            echo "All of them: MinSizeRel, compressed bytecode, hardened (except MSVC,"
+            echo "which compiles those levers out), no WebAssembly, no"
             echo "mimalloc, and no \`eval\`/\`serve\`/\`test\`/\`bundle\`/\`app\`"
             echo "subcommands. Always present: WebCrypto, \`run\`, the REPL, \`compile\`."
             echo
-            # GitHub renders raw HTML in release bodies, and the blank line
-            # after </summary> is what keeps the fenced blocks inside parsing
-            # as Markdown rather than as literal text.
+            # The blank line after </summary> is what keeps the fenced blocks
+            # inside parsing as Markdown rather than as literal text.
             echo '<details>'
             echo "<summary>see details, sha256, ... ($(ls -d dist/*/ | wc -l | tr -d ' ') builds)</summary>"
             echo

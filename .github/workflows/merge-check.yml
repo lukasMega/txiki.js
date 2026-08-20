@@ -1,11 +1,10 @@
 name: merge-check
 
-# Dry-runs the upstream merge every day and keeps ONE issue up to date with the
-# conflicted paths. No build, no push -- this is a tripwire, not a gate. It
-# turns "you spent an afternoon on a merge" into a daily one-hunk chore.
+# Dry-runs the upstream merge daily and keeps ONE issue up to date with the
+# conflicted paths. No build, no push -- a tripwire, not a gate.
 #
-# Both numbers it reports matter. A rising `behind` with zero conflicts is still
-# a signal: it is the merge you should simply do, before it grows teeth.
+# Both numbers matter: a rising `behind` with zero conflicts is the merge you
+# should simply do, before it grows teeth.
 
 on:
   schedule:
@@ -55,9 +54,8 @@ jobs:
 
           git merge --abort || true
 
-      # One issue, reused: opened when conflicts appear, edited while they
-      # persist, closed when the merge is clean again. A new issue per run
-      # would be a notification firehose that nobody reads.
+      # One issue, reused: opened on conflict, edited while it persists, closed
+      # when clean. A new issue per run is a firehose nobody reads.
       - name: Report
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,11 +72,10 @@ jobs:
           gh label create upstream-merge --repo "$REPO" --color d93f0b \
             --description 'Opened by the merge-check tripwire' 2>/dev/null || true
 
-          # The issue tracker is a reporting channel, not the check itself. It
-          # was disabled on this fork for months, and `set -e` on this very
-          # query turned the tripwire into a job that failed identically on the
-          # clean and the conflicted path -- a red X that says nothing. Probe it
-          # once and degrade to annotations instead.
+          # The tracker is a reporting channel, not the check. It was disabled
+          # on this fork for months, and `set -e` here made the job fail
+          # identically on the clean and conflicted paths -- a red X that says
+          # nothing. Probe once and degrade to annotations instead.
           issues_ok=1
           existing=$(gh issue list --repo "$REPO" --state open --label upstream-merge \
             --json number --jq '.[0].number // empty' 2>issue-probe.txt) || issues_ok=0

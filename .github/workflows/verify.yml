@@ -1,21 +1,14 @@
 name: Verify (slim profiles)
 
-# Per-push gate for the fork's slim builds: build each published profile and run
-# the WHOLE test suite against the artifact that would actually ship.
+# Per-push gate: build each published profile and run the WHOLE suite against
+# the artifact that would actually ship. Every profile compiles `test` out, so
+# the full-CLI host `tjs` (--host-tjs) drives the loop while TJS_TEST_EXE points
+# each test file at the slim binary; the skip filter probes the binary under
+# test, so the tallies describe the artifact.
 #
-# The artifacts cannot drive the suite themselves -- every profile compiles the
-# `test` subcommand out -- so the full-CLI host `tjs` built alongside them (via
-# `--host-tjs`) runs the loop while TJS_TEST_EXE points each test file at the
-# slim binary. The skip filter probes the binary under test, not the host, so
-# the skip counts below describe the artifact.
-#
-# The feature vector itself is asserted inside the build: scripts/build-dist.mjs
-# smoke-tests wasm/sqlite/webcrypto/ffi/tls/bundledCa on the freshly built
-# binary, so a silently flipped CMake default fails there rather than as a
-# puzzling test failure here.
-#
-# Linux only, by design: this is the fast per-merge signal. dist.yml runs the
-# same suite on all four platforms before anything is published.
+# Linux only, by design -- this is the fast per-merge signal; dist.yml covers
+# the other platforms before anything is published. Keep the two matrices in
+# step: a profile verified here but not built there would ship untested.
 
 on:
   push:
@@ -44,11 +37,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ min, ffi, tls, ffi-tls ]
+        profile: [ min, ffi, tls, ffi-tls, sqlite, ffi-tls-sqlite ]
     env:
-      # mise.toml pins `ubi:saghul/txiki.js`, for which upstream publishes no
-      # Linux asset; `mise run` installs every tool in the config before running
-      # a task, so without this the job dies installing a binary it never uses.
+      # `mise run` installs every tool in mise.toml first, and upstream publishes
+      # no Linux asset for the `ubi:saghul/txiki.js` pin -- the job would die
+      # installing a binary it never uses.
       MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
     steps:
       - uses: actions/checkout@v7
@@ -69,8 +62,8 @@ jobs:
       - name: Install npm dependencies
         run: npm install --ignore-scripts
 
-      # --host-tjs adds the full-CLI driver and the test fixture libraries to
-      # build-host, the tree build-dist.mjs already configures for tjsc.
+      # --host-tjs adds the full-CLI driver and the test fixtures to build-host,
+      # the tree build-dist.mjs already configures for tjsc.
       - name: Build ${{ matrix.profile }} + host driver
         run: >-
           mise run dist --
@@ -78,8 +71,8 @@ jobs:
           --out dist/${{ matrix.profile }}
           --host-tjs
 
-      # TJS_TEST_LIBDIR sends tests/helpers/ffi.js at build-host's
-      # libffi-test instead of its ./build default.
+      # TJS_TEST_LIBDIR points the fixture lookups at build-host instead of
+      # their ./build default.
       - name: Run the suite against dist/${{ matrix.profile }}
         env:
           TJS_TEST_EXE: ${{ github.workspace }}/dist/${{ matrix.profile }}/tjs
@@ -87,15 +80,12 @@ jobs:
         run: ./build-host/tjs test tests/ 2>&1 | tee test-output.txt
 
       - name: Job summary
-        # Report the tallies even when the suite failed: a profile that goes
-        # green by skipping half the suite is the failure mode this whole
-        # harness exists to catch, so the skip count is part of the result.
+        # Tallies even on failure: a profile that goes green by skipping half
+        # the suite is the failure mode this harness exists to catch.
         if: always()
         run: |
-          # Build the escape byte with printf rather than writing \x1b: only GNU
-          # sed understands that spelling, and a sed that quietly matches nothing
-          # would leave the tallies at zero -- which reads as "clean" and is
-          # exactly the false green this harness exists to catch.
+          # printf, not \x1b: that spelling is GNU-sed-only, and a sed matching
+          # nothing would leave the tallies at zero -- which reads as "clean".
           esc=$(printf '\033')
           sed "s/${esc}\[[0-9;]*m//g" test-output.txt > test-plain.txt || : > test-plain.txt
           count() { grep -cE "[[:space:]]$1\$" test-plain.txt || true; }
