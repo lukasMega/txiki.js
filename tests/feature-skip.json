@@ -32,11 +32,11 @@
     "test-ffi-*.js",
     "test-dispose-ffi-dlopen.js"
   ],
-  "cliEval": [
+  "cli.eval": [
     "test-console-*.js",
     "test-mem-limit.js"
   ],
-  "cliServe": [
+  "cli.serve": [
     "test-serve-basic.js",
     "test-serve-custom-port.js",
     "test-serve-echo.js",
@@ -47,19 +47,19 @@
     "test-import-http.js",
     "test-import-http-timeout.js"
   ],
-  "cliBundler": [
+  "cli.bundler": [
     "test-bundle-*.js"
   ],
-  "cliCompile": [
+  "cli.compile": [
     "test-compile.js"
   ],
-  "cliApp": [
+  "cli.app": [
     "test-app-compile.js"
   ],
-  "cliHelp": [
+  "cli.help": [
     "test-cli-help.js"
   ],
-  "cliTlsCa": [
+  "cli.tlsCa": [
     "test-tls-ca.js"
   ]
 }

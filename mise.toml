@@ -390,3 +390,57 @@ for p in min ffi tls ffi-tls; do
   TJS_TEST_EXE="$(pwd)/dist/$p/tjs" ./build/tjs test tests/
 done
 """
+
+# CI's Lint job (.github/workflows/ci.yml) runs `clang-format -i src/*.{c,h}` on
+# ubuntu-24.04 with the distro package -- clang-format 18 -- and fails on a dirty
+# tree. So 18 is the reference version, and a newer local formatter (Homebrew
+# ships 22) reformats files CI then rejects, with no way to reproduce the failure
+# locally. `make format` cannot know that; this task refuses instead of guessing.
+[tasks."format"]
+description = "clang-format src/, pinned to the version CI's Lint job uses (18)"
+run = """
+set -eu
+REQUIRED=18
+CF="${CLANG_FORMAT:-}"
+if [ -z "$CF" ]; then
+  if command -v clang-format-$REQUIRED >/dev/null 2>&1; then
+    CF="clang-format-$REQUIRED"
+  else
+    CF="clang-format"
+  fi
+fi
+GOT="$("$CF" --version | sed -E 's/.*version ([0-9]+).*/\\1/')"
+if [ "$GOT" != "$REQUIRED" ]; then
+  echo "clang-format $GOT found ($CF), but CI formats with $REQUIRED." >&2
+  echo "Formatting with $GOT would red the Lint job in a way you cannot reproduce here." >&2
+  echo "Install it (brew install llvm@$REQUIRED / apt install clang-format-$REQUIRED)," >&2
+  echo "then re-run, or point CLANG_FORMAT at the $REQUIRED binary." >&2
+  exit 1
+fi
+"$CF" -i src/*.c src/*.h
+git status --porcelain --untracked-files=no -- src
+"""
+
+# src/cacert.c is `merge=keep-ours` (it is miniz-compressed, upstream's is plain
+# PEM), so an upstream refresh never reaches us -- the bundle only moves when
+# someone runs this. Cadence: quarterly. Last regenerated 2026-08-08 (4dcc70e2).
+# The cert-count delta is the number to look at: a large drop means curl.se
+# distrusted a root, which is exactly the change that breaks TLS for some host.
+[tasks."ca:refresh"]
+description = "Regenerate src/cacert.c from curl.se and report the cert-count delta"
+run = """
+set -eu
+count() {
+  python3 - "$1" <<'PY'
+import re, sys, zlib
+data = open(sys.argv[1]).read()
+blob = bytes(int(b, 16) for b in re.findall(r'0x([0-9a-f]{2})', data))
+print(zlib.decompress(blob[4:]).count(b'BEGIN CERTIFICATE'))
+PY
+}
+before=$(count src/cacert.c)
+sh scripts/update-ca-bundle.sh
+after=$(count src/cacert.c)
+echo "certificates: $before -> $after (delta $((after - before)))"
+git diff --stat -- src/cacert.c
+"""

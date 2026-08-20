@@ -172,11 +172,6 @@ declare global {
             *   present.
             * - `ffi` — `BUILD_WITH_FFI`: the `tjs:ffi` module.
             *
-            * The `cli*` flags mirror the esbuild `--define` gating of the CLI
-            * entry point, so a build's subcommand surface is introspectable the
-            * same way its runtime features are. They are added by the entry
-            * point itself and are therefore absent inside a Worker, which has
-            * no CLI.
             */
             readonly features: {
                 readonly wasm: boolean;
@@ -185,14 +180,25 @@ declare global {
                 readonly bundledCa: boolean;
                 readonly webcrypto: boolean;
                 readonly ffi: boolean;
-                readonly cliEval?: boolean;
-                readonly cliServe?: boolean;
-                readonly cliBundler?: boolean;
-                readonly cliTestRunner?: boolean;
-                readonly cliCompile?: boolean;
-                readonly cliApp?: boolean;
-                readonly cliHelp?: boolean;
-                readonly cliTlsCa?: boolean;
+            };
+
+            /**
+            * Which CLI subcommands this build carries.
+            *
+            * Mirrors the esbuild `--define` gating of the CLI entry point, so a
+            * build's subcommand surface is introspectable the same way its
+            * runtime features are. Published by the entry point itself, so it is
+            * absent inside a Worker, which has no CLI.
+            */
+            readonly cli?: {
+                readonly eval: boolean;
+                readonly serve: boolean;
+                readonly bundler: boolean;
+                readonly testRunner: boolean;
+                readonly compile: boolean;
+                readonly app: boolean;
+                readonly help: boolean;
+                readonly tlsCa: boolean;
             };
         }
 

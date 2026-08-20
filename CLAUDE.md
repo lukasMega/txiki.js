@@ -250,13 +250,14 @@ TJS_TEST_EXE=$(pwd)/dist/min/tjs ./build/tjs test tests/   # or: mise run test:d
 mise run test:dist:all                                     # all four published profiles
 ```
 
-The skip filter probes `TJS_TEST_EXE` for its own `tjs.engine.features` before the loop, so
-tests are gated on the binary *under test*, not on the host. A probe that cannot run, prints
-nothing, or reports fewer feature keys than the host is a hard error — never a silent pass.
+The skip filter probes `TJS_TEST_EXE` for its own `tjs.engine.features` *and* `tjs.engine.cli`
+before the loop, so tests are gated on the binary *under test*, not on the host. A probe that
+cannot run, prints nothing, or reports fewer keys than the host is a hard error — never a silent
+pass.
 
 Three black-box tests assert against the binary's own feature vector rather than a fixed
 expectation, so they are meaningful on every profile and need no `feature-skip.json` entry:
-`test-cli-gating.js` (a subcommand is reachable iff `features.cli*` says so),
+`test-cli-gating.js` (a subcommand is reachable iff `tjs.engine.cli` says so),
 `test-builtin-module-gating.js` (a `tjs:` module is importable iff its feature is on) and
 `test-test-exe-override.js` (the suite really is running inside `TJS_TEST_EXE`).
 
@@ -277,11 +278,17 @@ normal build.
 ### CLI gating in `feature-skip.json`
 
 The `feature-skip.json` mechanism described above also gates tests that spawn a CLI subcommand
-which slim builds compile out. The entry point publishes its esbuild `--define` gating into the
-same object as `cliEval`, `cliServe`, `cliBundler`, `cliTestRunner`, `cliCompile`, `cliApp`,
-`cliHelp` and `cliTlsCa`, so `feature-skip.json` keys on them exactly like a CMake feature.
-Prefer splitting a test that only *partly* needs a gated subcommand (see `test-cli-help.js` vs
-`test-cli-version.js`) over skipping the whole file.
+which slim builds compile out. The entry point publishes its esbuild `--define` gating as its own
+frozen `tjs.engine.cli` — `eval`, `serve`, `bundler`, `testRunner`, `compile`, `app`, `help`,
+`tlsCa` — and `feature-skip.json` keys on those under a `cli.` prefix (`"cli.eval"`,
+`"cli.bundler"`, …) alongside the plain CMake feature keys. Prefer splitting a test that only
+*partly* needs a gated subcommand (see `test-cli-help.js` vs `test-cli-version.js`) over skipping
+the whole file.
+
+It is a separate object, not extra keys on `tjs.engine.features`, so that `src/js/core/engine.js`
+stays byte-identical to upstream and `features` keeps upstream's invariant of being frozen at
+construction. `tjs.engine` is extensible, which is what makes this possible; a Worker never
+evaluates `run-main`, so `tjs.engine.cli` is simply `undefined` there.
 
 ## Generated bundles are tracked here
 
@@ -350,3 +357,16 @@ Both build with `--host-tjs` (driver + fixtures into `build-host`) and then run 
 so a silently flipped CMake default fails at build time rather than as a confusing test failure.
 Read the job summary's SKIP count, not just the FAIL count: a profile can go green by skipping
 too much.
+
+## clang-format 18 is the reference version
+
+`make format` (upstream's target) runs whatever `clang-format` is on PATH. CI's Lint job pins
+`ubuntu-24.04` and installs the distro package — **clang-format 18** — then fails on a dirty tree,
+so 18 is the arbiter. A newer local formatter (Homebrew currently ships 22) reformats files that
+18 then wants back, and the resulting red Lint **cannot be reproduced locally**: re-running
+`clang-format -i src/mod_ffi.c` on the v22 machine is a no-op.
+
+Use `mise run format`, not `make format`. It resolves `$CLANG_FORMAT`, then `clang-format-18`,
+then `clang-format`, and refuses to run at all unless the major version is 18. Do not pin the
+version in `.github/workflows/ci.yml` — that file is upstream-owned and the pin belongs on our
+side of the split.

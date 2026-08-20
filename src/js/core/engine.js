@@ -79,11 +79,7 @@ Object.defineProperty(engine, 'features', {
     enumerable: true,
     configurable: false,
     writable: false,
-    // Deliberately not frozen on the main thread: the run-main entry point adds
-    // the compile-time CLI gating (cliEval, cliBundler, ...) to this same object
-    // and freezes it there. A worker never evaluates run-main and has no CLI
-    // surface at all, so it is sealed right away.
-    value: core.isWorker ? Object.freeze(core.features) : core.features
+    value: Object.freeze(core.features)
 });
 
 Object.defineProperty(engine, 'versions', {
