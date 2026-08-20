@@ -74,8 +74,18 @@ jobs:
           gh label create upstream-merge --repo "$REPO" --color d93f0b \
             --description 'Opened by the merge-check tripwire' 2>/dev/null || true
 
+          # The issue tracker is a reporting channel, not the check itself. It
+          # was disabled on this fork for months, and `set -e` on this very
+          # query turned the tripwire into a job that failed identically on the
+          # clean and the conflicted path -- a red X that says nothing. Probe it
+          # once and degrade to annotations instead.
+          issues_ok=1
           existing=$(gh issue list --repo "$REPO" --state open --label upstream-merge \
-            --json number --jq '.[0].number // empty')
+            --json number --jq '.[0].number // empty' 2>issue-probe.txt) || issues_ok=0
+          if [ "$issues_ok" -eq 0 ]; then
+            existing=
+            echo "::warning::cannot use the issue tracker ($(tr '\n' ' ' < issue-probe.txt)); reporting via annotations only"
+          fi
 
           {
             echo "### $BEHIND upstream commits unmerged"
@@ -97,13 +107,33 @@ jobs:
             echo "_Updated by [merge-check]($RUN_URL)._"
           } > body.md
 
+          # A clean dry-run opens no issue, so the summary is the only place the
+          # nudge can land: `behind` alone is a number nobody acts on.
           {
             echo "### merge-check"
             echo
             echo "behind: **$BEHIND** — conflicts: **${CONFLICTS:-none}**"
+            echo
+            if [ -z "$CONFLICTS" ] && [ "$BEHIND" -gt 0 ]; then
+              echo "The merge is clean. Take it now, before it grows teeth:"
+              echo
+              echo '```sh'
+              echo 'mise run sync:upstream'
+              echo '```'
+            elif [ -n "$CONFLICTS" ] && [ "$issues_ok" -eq 1 ]; then
+              echo "See the [\`upstream-merge\`]($GITHUB_SERVER_URL/$REPO/issues?q=is%3Aopen+label%3Aupstream-merge) issue."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ -n "$CONFLICTS" ]; then
+          if [ "$issues_ok" -eq 0 ]; then
+            # No issue to carry state, so the conflict has to be loud in the one
+            # place that is left: the run's own conclusion.
+            if [ -n "$CONFLICTS" ]; then
+              echo "::error::upstream merge conflicts in: $(echo "$CONFLICTS" | tr '\n' ' ')"
+              exit 1
+            fi
+            echo "clean, and the issue tracker is unavailable"
+          elif [ -n "$CONFLICTS" ]; then
             if [ -n "$existing" ]; then
               gh issue edit "$existing" --repo "$REPO" --body-file body.md
               echo "updated issue #$existing"
