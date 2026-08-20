@@ -260,9 +260,7 @@ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
     tjs__mod_sqlite3_init(ctx, ns);
 #endif
     tjs__mod_streams_init(ctx, ns);
-#ifdef TJS_HAVE_TLS
     tjs__mod_tls_init(ctx, ns);
-#endif
     tjs__mod_sys_init(ctx, ns);
     tjs__mod_text_coding_init(ctx, ns);
     tjs__mod_timers_init(ctx, ns);
@@ -275,9 +273,7 @@ static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
     tjs__mod_hashing_init(ctx, ns);
     tjs__mod_httpclient_init(ctx, ns);
     tjs__mod_miniz_init(ctx, ns);
-#ifdef TJS_HAVE_WEBCRYPTO
     tjs__webcrypto_init(ctx, ns);
-#endif
     tjs__mod_ws_init(ctx, ns);
     tjs__mod_httpserver_init(ctx, ns);
 #ifndef _WIN32
@@ -718,9 +714,7 @@ void TJS_FreeRuntime(TJSRuntime *qrt) {
     }
 
     /* Destroy shared TLS context. */
-#ifdef TJS_HAVE_TLS
     tjs__mod_tls_cleanup(qrt);
-#endif
 
     /* Destroy the JS engine. */
     {

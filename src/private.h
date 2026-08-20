@@ -274,4 +274,6 @@ JSValue TJS_EvalModuleContent(JSContext *ctx,
                               const char *content,
                               size_t len);
 
+#include "slim.h"
+
 #endif
