@@ -12,27 +12,33 @@ import { TpkTrailer, runTpk, appInit, appPack, appCompile } from './tpk.js';
 
 
 /**
- * Publish the compile-time CLI gating alongside the CMake feature flags, so a
- * build's subcommand surface is introspectable the same way its runtime
- * features are (and so `tests/feature-skip.json` can gate on it). These defines
- * only exist in this bundle, which is why `core/engine.js` leaves the object
- * unfrozen for us and we seal it here.
+ * Publish the compile-time CLI gating, so a build's subcommand surface is
+ * introspectable the same way its runtime features are (and so
+ * `tests/feature-skip.json` can gate on it). These defines only exist in this
+ * bundle, so the object is built and frozen here rather than in
+ * `core/engine.js`, which stays free of the fork's CLI gating entirely.
+ * A worker never evaluates this module and has no CLI surface, so `tjs.engine`
+ * simply has no `cli` there.
  *
  * This runs at module scope on purpose: `tjs run <file>` must report the same
  * vector as every other entry point, because a slim binary is probed through
  * `run` by the host-driven test loop.
  */
-Object.assign(tjs.engine.features, {
-    cliEval: __TJS_EVAL__,
-    cliServe: __TJS_SERVE__,
-    cliBundler: __TJS_BUNDLER__,
-    cliTestRunner: __TJS_TEST_RUNNER__,
-    cliCompile: __TJS_COMPILE__,
-    cliApp: __TJS_APP__,
-    cliHelp: __TJS_HELP__,
-    cliTlsCa: __TJS_TLS_CA__,
+Object.defineProperty(tjs.engine, 'cli', {
+    enumerable: true,
+    configurable: false,
+    writable: false,
+    value: Object.freeze({
+        eval: __TJS_EVAL__,
+        serve: __TJS_SERVE__,
+        bundler: __TJS_BUNDLER__,
+        testRunner: __TJS_TEST_RUNNER__,
+        compile: __TJS_COMPILE__,
+        app: __TJS_APP__,
+        help: __TJS_HELP__,
+        tlsCa: __TJS_TLS_CA__,
+    })
 });
-Object.freeze(tjs.engine.features);
 
 /**
  * Before we do anything else, create our "home" directory,
