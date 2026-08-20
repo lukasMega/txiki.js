@@ -16,3 +16,10 @@ build-dist/
 build-host/
 dist/
 bench*
+
+# Local tooling that lives in the work tree but is not part of the project.
+.claude/
+.rtk/
+slim.sh
+__mise.toml
+tjs.entitlements
