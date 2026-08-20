@@ -1,9 +1,10 @@
 name: Dist (slim binaries)
 
 # Builds every published slim `tjs` profile on every supported platform via the
-# portable Node driver (scripts/build-dist.mjs), then puts all of them on one
-# Release. The size gate is report-only until real per-platform numbers are
-# recorded -- pass --enforce-size then.
+# portable Node driver (scripts/build-dist.mjs), runs the full test suite
+# against each built binary, then puts all of them on one Release. A profile
+# whose suite fails is never published. The size gate is report-only until real
+# per-platform numbers are recorded -- pass --enforce-size then.
 #
 # Profiles (--profile): min, ffi, tls, ffi-tls. They differ only in FFI and TLS;
 # all four are MinSizeRel + compressed bytecode + slim CLI, and keep WebCrypto,
@@ -112,26 +113,53 @@ jobs:
       - name: Install npm dependencies
         run: npm install --ignore-scripts
 
+      # --host-tjs also builds the full-CLI driver and the test fixture
+      # libraries in build-host; the artifact cannot run the suite itself.
       - name: Build (Unix)
         if: runner.os != 'Windows'
-        run: mise run dist -- --profile ${{ matrix.profile }} --out dist
+        run: >-
+          mise run dist -- --profile ${{ matrix.profile }} --out dist --host-tjs
 
       - name: Build (Windows)
         # node:util parseArgs refuses an option value that starts with a dash
         # unless it is written with `=`, so these cannot be split into two words.
         run: >
-          node scripts/build-dist.mjs --profile ${{ matrix.profile }} --out dist
+          node scripts/build-dist.mjs --profile ${{ matrix.profile }} --out dist --host-tjs
           "--cmake-arg=-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
           "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
         if: runner.os == 'Windows'
 
+      # Nothing is published until the shipped binary has run the whole suite
+      # (the `release` job needs: build). The artifact's own `test` subcommand
+      # is compiled out, so the host driver runs the loop and TJS_TEST_EXE
+      # points every test file at the artifact; the skip filter probes the
+      # artifact, so the tallies below describe it and not the driver.
+      # TJS_TEST_LIBDIR sends the FFI/SQLite fixture lookups to the same tree.
+      - name: Test the artifact
+        shell: bash
+        env:
+          TJS_TEST_EXE: ${{ github.workspace }}/dist/tjs${{ runner.os == 'Windows' && '.exe' || '' }}
+          TJS_TEST_LIBDIR: ./build-host
+        run: |
+          host=./build-host/tjs
+          [ -x "$host" ] || host=./build-host/tjs.exe
+          "$host" test tests/ 2>&1 | tee test-output.txt
+
       - name: Job summary
+        if: always()
         shell: bash
         run: |
+          sed 's/\x1b\[[0-9;]*m//g' test-output.txt > test-plain.txt || : > test-plain.txt
+          count() { grep -cE "[[:space:]]$1\$" test-plain.txt || true; }
           {
             echo "### ${{ matrix.profile }} ${{ matrix.target.name }}"
+            echo
+            echo "| OK | SKIP | FAIL | TIMEOUT |"
+            echo "| ---: | ---: | ---: | ---: |"
+            echo "| $(count OK) | $(count SKIP) | $(count FAIL) | $(count TIMEOUT) |"
+            echo
             echo '```'
-            cat dist/BUILDINFO.txt
+            cat dist/BUILDINFO.txt || echo '(no BUILDINFO: the build failed)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
