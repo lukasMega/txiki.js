@@ -1,0 +1,171 @@
+name: auto-merge-pr
+
+# Proposes the upstream merge as a PR. It never pushes to `slim`.
+#
+# This is deliberately the weak version of "automate the merge". `sync-upstream`
+# is safe because the REST merge-upstream endpoint refuses to act on a diverged
+# branch; `slim` is diverged by design, so nothing here has that backstop. A
+# textually clean merge can still be semantically wrong -- e.g. upstream renames
+# a file that `tjs_slim_configure_core()` removes from the target, which is
+# *designed* to hard-error at configure time, i.e. after the merge commit would
+# already exist. So the merge commit is only ever offered on a branch, and
+# `verify.yml` (which fires on `pull_request: branches: [slim]` already) decides
+# whether it is fit to land. A human clicks merge.
+#
+# Third step in the daily chain: sync-upstream (04:30) -> merge-check (05:47) ->
+# auto-merge-pr (06:15). It recomputes `behind` and the dry-run rather than
+# reading merge-check's outputs: workflow outputs do not cross workflow runs,
+# and a gate that silently reuses a stale answer is worse than one that costs an
+# extra `git merge --no-commit`.
+
+on:
+  schedule:
+    - cron: '15 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-merge-pr
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    if: github.event.repository.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      # mise.toml pins `ubi:saghul/txiki.js`, for which upstream publishes no
+      # Linux asset; `mise run` would die installing a binary this job never uses.
+      MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: slim
+          fetch-depth: 0        # a merge base cannot be computed from a shallow clone
+          submodules: recursive # `make js` builds tjsc, which needs the deps
+
+      - name: Decide whether there is anything to propose
+        id: gate
+        run: |
+          set -euo pipefail
+          # FIRST, always: without the merge drivers the generated bundles
+          # content-merge silently, and a three-way text merge of a QuickJS
+          # bytecode array is wrong output with no conflict to warn you.
+          sh scripts/setup-repo.sh
+          git config user.name  'auto-merge-pr'
+          git config user.email 'auto-merge-pr@users.noreply.github.com'
+          git remote add upstream https://github.com/saghul/txiki.js.git
+          git fetch --no-tags upstream master
+
+          behind=$(git rev-list --count HEAD..upstream/master)
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+          if [ "$behind" -eq 0 ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "up to date with upstream"
+            exit 0
+          fi
+
+          # One open proposal at a time. A second PR for the same merge would
+          # just be a stale duplicate the moment the first one lands.
+          open_pr=$(gh pr list --repo "$REPO" --base slim --state open \
+            --json number,headRefName \
+            --jq '[.[] | select(.headRefName | startswith("chore/upstream-merge-"))][0].number // empty')
+          if [ -n "$open_pr" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR #$open_pr is already proposing an upstream merge"
+            exit 0
+          fi
+
+          if git merge --no-commit --no-ff upstream/master >/dev/null 2>&1; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            # merge-check owns conflict reporting; do not open a second channel
+            # for the same fact.
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::merge conflicts -- see the upstream-merge issue; resolve with 'mise run sync:upstream'"
+          fi
+          git merge --abort || true
+
+      - name: Setup mise
+        if: steps.gate.outputs.proceed == 'true'
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Install npm dependencies
+        if: steps.gate.outputs.proceed == 'true'
+        run: npm install --ignore-scripts
+
+      # The merge is left uncommitted so that `make js` output lands *in* the
+      # merge commit. Regenerating afterwards, in a follow-up commit, is the
+      # mistake this ordering exists to prevent: `make js` reads src/js/**, so it
+      # must run after the last merged edit there, and CI's codegen job fails on
+      # a merge commit whose bundles disagree with their sources.
+      - name: Merge upstream and regenerate the bundles
+        if: steps.gate.outputs.proceed == 'true'
+        id: merge
+        run: |
+          set -euo pipefail
+          branch="chore/upstream-merge-$(date -u +%Y-%m-%d)"
+          # A merged-and-deleted proposal from earlier the same day would make the
+          # push fail on a stale remote ref; the run number keeps it unique.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            branch="$branch-${{ github.run_number }}"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          git switch -c "$branch"
+          git merge --no-commit --no-ff upstream/master
+
+          make js
+          # Explicit paths, never `git add -A`: `.gitignore` hides a stale index
+          # entry from `git status` rather than protecting you from it.
+          git add src/bundles/c
+          git commit --no-edit
+
+          {
+            echo "### proposed upstream merge"
+            echo
+            echo "branch: \`$branch\` — ${{ steps.gate.outputs.behind }} commits"
+            echo
+            echo '```'
+            git show --stat --oneline HEAD | head -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          git push origin "$branch"
+
+      - name: Open the PR
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          cat > pr-body.md <<'EOF'
+          Opened by `auto-merge-pr`. The dry-run merge was clean and the bundles were
+          regenerated with `make js` **inside the merge commit**, so `codegen` should pass.
+
+          Before merging, check that:
+
+          - `verify.yml` is green on all four profiles — it is the gate, not this workflow.
+          - `src/bundles/c/**` in the diff is regenerated output, not a text merge. If the
+            merge drivers had not been registered this diff would be silently wrong; the job
+            runs `scripts/setup-repo.sh` first for exactly that reason.
+          - nothing upstream renamed a source that `tjs_slim_configure_core()` removes — that
+            hard-errors at configure time, which shows up as a build failure here, not a conflict.
+          EOF
+          url=$(gh pr create --repo "$REPO" --base slim \
+            --head "${{ steps.merge.outputs.branch }}" \
+            --title "chore: merge upstream (${{ steps.gate.outputs.behind }} commits)" \
+            --body-file pr-body.md)
+          echo "::notice::$url"
+
+          # NOT enabled: `gh pr merge --auto --merge`. That would land the merge on
+          # `slim` unattended, and it is only defensible once (a) branch protection
+          # on `slim` requires verify's four contexts plus codegen -- without
+          # protection `--auto` merges on nothing -- and (b) the per-merge signal
+          # covers the platforms we ship. It is Linux-only today (see
+          # .claude/plans/2026-08-20_fork-deferred-c2-c3-c4.md, C2), so enabling
+          # --auto is a decision to accept Windows/macOS regressions on `slim`.
