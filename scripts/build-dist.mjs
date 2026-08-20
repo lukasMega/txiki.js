@@ -88,10 +88,22 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // another ~240 KB above that. Every one of these numbers on the old flat 2 MiB
 // budget would have failed for linux-arm64 the moment --enforce-size was turned on.
 const MEASURED = {
-    'linux-x64': { min: 1918920, ffi: 1960328, tls: 2361440, 'ffi-tls': 2406944, sqlite: 2717208, 'ffi-tls-sqlite': 3205248 },
-    'linux-arm64': { min: 2184240, ffi: 2250080, tls: 2708656, 'ffi-tls': 2708960, sqlite: 3183016, 'ffi-tls-sqlite': 3707736 },
-    'darwin-arm64': { min: 2008944, ffi: 2059776, tls: 2489504, 'ffi-tls': 2540336, sqlite: 2939056, 'ffi-tls-sqlite': 3486960 },
-    'win32-x64': { min: 2421248, ffi: 2486784, tls: 2921472, 'ffi-tls': 2985984, sqlite: 3246592, 'ffi-tls-sqlite': 3810816 },
+    'linux-x64': {
+        min: 1918920, ffi: 1960328, tls: 2361440,
+        'ffi-tls': 2406944, sqlite: 2717208, 'ffi-tls-sqlite': 3205248,
+    },
+    'linux-arm64': {
+        min: 2184240, ffi: 2250080, tls: 2708656,
+        'ffi-tls': 2708960, sqlite: 3183016, 'ffi-tls-sqlite': 3707736,
+    },
+    'darwin-arm64': {
+        min: 2008944, ffi: 2059776, tls: 2489504,
+        'ffi-tls': 2540336, sqlite: 2939056, 'ffi-tls-sqlite': 3486960,
+    },
+    'win32-x64': {
+        min: 2421248, ffi: 2486784, tls: 2921472,
+        'ffi-tls': 2985984, sqlite: 3246592, 'ffi-tls-sqlite': 3810816,
+    },
 };
 
 // Headroom over the measured size before the gate trips. Wide enough that a
