@@ -206,7 +206,7 @@ const { values: opts } = parseArgs({
     options: {
         profile: { type: 'string', default: 'ffi' },
         ref: { type: 'string' },
-        repo: { type: 'string', default: 'https://github.com/lukasMega/txiki.js.git' },
+        repo: { type: 'string', default: 'https://github.com/lukasMega/txiki.js-with-slim-builds.git' },
         workdir: { type: 'string' },
         'build-dir': { type: 'string', default: 'build-dist' },
         'host-dir': { type: 'string', default: 'build-host' },

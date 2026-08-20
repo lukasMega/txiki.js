@@ -350,3 +350,16 @@ Both build with `--host-tjs` (driver + fixtures into `build-host`) and then run 
 so a silently flipped CMake default fails at build time rather than as a confusing test failure.
 Read the job summary's SKIP count, not just the FAIL count: a profile can go green by skipping
 too much.
+
+## clang-format 18 is the reference version
+
+`make format` (upstream's target) runs whatever `clang-format` is on PATH. CI's Lint job pins
+`ubuntu-24.04` and installs the distro package — **clang-format 18** — then fails on a dirty tree,
+so 18 is the arbiter. A newer local formatter (Homebrew currently ships 22) reformats files that
+18 then wants back, and the resulting red Lint **cannot be reproduced locally**: re-running
+`clang-format -i src/mod_ffi.c` on the v22 machine is a no-op.
+
+Use `mise run format`, not `make format`. It resolves `$CLANG_FORMAT`, then `clang-format-18`,
+then `clang-format`, and refuses to run at all unless the major version is 18. Do not pin the
+version in `.github/workflows/ci.yml` — that file is upstream-owned and the pin belongs on our
+side of the split.
