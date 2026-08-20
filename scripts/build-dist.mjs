@@ -169,6 +169,15 @@ function rmrf(p) {
     fs.rmSync(p, { recursive: true, force: true });
 }
 
+// Overwriting an existing executable in place is not safe on macOS arm64: the
+// kernel caches the code-signature verdict per vnode, so a rebuilt binary
+// written over the previous one is SIGKILLed on exec ("Killed: 9") even though
+// its own ad-hoc signature is valid. Unlinking first gives it a fresh inode.
+function copyExecutable(src, dest) {
+    fs.rmSync(dest, { force: true });
+    fs.copyFileSync(src, dest);
+}
+
 function sha256(file) {
     return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
@@ -198,6 +207,7 @@ const { values: opts } = parseArgs({
         'bundles-only': { type: 'boolean', default: false },
         'keep-bundles': { type: 'boolean', default: false },
         'skip-smoke': { type: 'boolean', default: false },
+        'host-tjs': { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
     },
 });
@@ -213,6 +223,9 @@ if (opts.help) {
   --workdir <dir>       Clone destination (default: a temp dir).
   --build-dir <dir>     CMake binary dir for tjs (default: build-dist).
   --host-dir <dir>      CMake binary dir for the host tjsc (default: build-host).
+                        Reconfigures the directory with a reduced feature set,
+                        so do not point it at a working build tree: \`make\` only
+                        passes BUILDTYPE and MIMALLOC and would not undo it.
   --out <dir>           Artifact output dir (default: dist).
   --max-size <bytes>    Size budget (default: per-platform table).
   --expect-size <bytes> Assert an exact byte size (bundle/flag parity check).
@@ -226,6 +239,11 @@ if (opts.help) {
   --keep-bundles        Do not restore src/bundles afterwards. src/bundles/c is
                         tracked in git; without this the tree is left untouched.
   --skip-smoke          Skip the runtime smoke test.
+  --host-tjs            Also build the full-CLI host \`tjs\` (and the test fixture
+                        libraries) in --host-dir. That binary is what drives
+                        \`tjs test tests/\` against the slim artifact via
+                        TJS_TEST_EXE -- the artifact cannot, its test runner is
+                        compiled out.
 `);
     process.exit(0);
 }
@@ -324,6 +342,18 @@ log(`jobs:      ${jobs}`);
 // Phase 1 -- host tjsc
 // ---------------------------------------------------------------------------
 
+// Single- and multi-config generators disagree on where an executable lands:
+// Ninja/Make put it at <dir>/<name>, Visual Studio at <dir>/<config>/<name>.
+// Probe, never assume.
+function findBuilt(dir, name, config) {
+    return [
+        path.join(dir, name),
+        path.join(dir, `${name}.exe`),
+        path.join(dir, config, name),
+        path.join(dir, config, `${name}.exe`),
+    ].find(p => fs.existsSync(p)) ?? null;
+}
+
 // tjsc is a build artifact that must exist *before* the bundles it compiles.
 // It is kept in its own tree so a future cross-build can produce a host tjsc
 // and a target tjs from the same source.
@@ -345,23 +375,49 @@ function buildHostTjsc() {
     run('cmake', [ '--build', dir, '--config', 'Release', '--target', 'tjsc',
         '--parallel', String(jobs) ], { cwd: root });
 
-    // Single-config generators (Ninja/Make) put it at <dir>/tjsc; multi-config
-    // ones (Visual Studio) at <dir>/<config>/tjsc.exe. Probe, never assume.
-    const candidates = [
-        path.join(dir, 'tjsc'),
-        path.join(dir, 'tjsc.exe'),
-        path.join(dir, 'Release', 'tjsc'),
-        path.join(dir, 'Release', 'tjsc.exe'),
-    ];
-    const found = candidates.find(p => fs.existsSync(p));
+    const found = findBuilt(dir, 'tjsc', 'Release');
 
     if (!found) {
-        fail(`tjsc not found after build; looked in:\n  ${candidates.join('\n  ')}`);
+        fail(`tjsc not found after building in ${dir}`);
     }
 
     log(`host tjsc: ${found}`);
 
-    return found;
+    return { tjsc: found, dir };
+}
+
+// The full-CLI `tjs` from the same host tree. Its only job is to *drive* the
+// suite against the slim artifact (`TJS_TEST_EXE=dist/tjs host-tjs test tests/`),
+// which the artifact cannot do for itself: every profile compiles its test
+// runner out. Reusing the already-configured host tree costs one more target
+// instead of a third CMake tree, and it must happen before generateBundles()
+// replaces src/bundles with the slim, compressed ones.
+//
+// Builds the default target rather than just `tjs-cli`, because that also
+// produces the ffi-test/sqlite-test fixture libraries the suite dlopens. Point
+// the suite at them with TJS_TEST_LIBDIR=<host-dir>; they default to ./build.
+function buildHostTjs(dir) {
+    log(`building host tjs (full CLI) in ${dir}`);
+    run('cmake', [ '--build', dir, '--config', 'Release', '--parallel', String(jobs) ],
+        { cwd: root });
+
+    const found = findBuilt(dir, 'tjs', 'Release');
+
+    if (!found) {
+        fail(`host tjs not found after building in ${dir}`);
+    }
+
+    // Publish it at one predictable path so callers need not know which
+    // generator CMake picked.
+    const dest = path.join(dir, isWindows ? 'tjs.exe' : 'tjs');
+
+    if (path.resolve(found) !== path.resolve(dest)) {
+        copyExecutable(found, dest);
+    }
+
+    log(`host tjs:  ${dest}`);
+
+    return dest;
 }
 
 // ---------------------------------------------------------------------------
@@ -584,16 +640,10 @@ function buildTjs() {
     run('cmake', [ '--build', dir, '--config', 'MinSizeRel', '--parallel', String(jobs) ],
         { cwd: root });
 
-    const candidates = [
-        path.join(dir, 'tjs'),
-        path.join(dir, 'tjs.exe'),
-        path.join(dir, 'MinSizeRel', 'tjs'),
-        path.join(dir, 'MinSizeRel', 'tjs.exe'),
-    ];
-    const found = candidates.find(p => fs.existsSync(p));
+    const found = findBuilt(dir, 'tjs', 'MinSizeRel');
 
     if (!found) {
-        fail(`tjs not found after build; looked in:\n  ${candidates.join('\n  ')}`);
+        fail(`tjs not found after building in ${dir}`);
     }
 
     return found;
@@ -638,6 +688,8 @@ check(typeof crypto.randomUUID() === 'string', 'randomUUID broken');
 const SMOKE_FFI = `
 import ffi from 'tjs:ffi';
 
+check(tjs.engine.features.ffi === true, 'features.ffi should be true');
+
 // dlopen the platform libc and actually call into it.
 const libs = {
     macOS: [ 'libSystem.B.dylib' ],
@@ -663,15 +715,22 @@ opened.close();
 
 // language=JavaScript
 const SMOKE_NO_FFI = `
-let ffiThrew = false;
+// The feature flag is the load-bearing assertion here. Importing an
+// unregistered tjs: module currently rejects with QuickJS's uninitialized
+// sentinel rather than an Error, so the catch below proves less than it looks
+// like it does -- see the F9 finding in
+// .claude/plans/2026-08-19_upstream-pr-silent-module-load.md.
+check(tjs.engine.features.ffi === false, 'features.ffi should be false');
+
+let ffiLoaded = true;
 
 try {
     await import('tjs:ffi');
 } catch {
-    ffiThrew = true;
+    ffiLoaded = false;
 }
 
-check(ffiThrew, 'tjs:ffi should be compiled out');
+check(!ffiLoaded, 'tjs:ffi should be compiled out');
 `;
 
 // language=JavaScript
@@ -685,6 +744,9 @@ check(tjs.engine.features.bundledCa === true, 'features.bundledCa should be true
 // language=JavaScript
 const SMOKE_NO_TLS = `
 check(tjs.engine.features.tls === false, 'features.tls should be false');
+// TJS_HAVE_BUNDLED_CA is TLS-gated in CMakeLists.txt, so a true here would mean
+// the two options had drifted apart.
+check(tjs.engine.features.bundledCa === false, 'features.bundledCa should be false');
 `;
 
 function smokeSource() {
@@ -797,7 +859,7 @@ function packageArtifact(bin, size) {
     const name = isWindows ? 'tjs.exe' : 'tjs';
     const dest = path.join(outDir, name);
 
-    fs.copyFileSync(bin, dest);
+    copyExecutable(bin, dest);
 
     if (!isWindows) {
         // actions/upload-artifact does not carry Unix permissions; the release
@@ -833,7 +895,11 @@ bundleSnapshot = opts['keep-bundles'] ? null : snapshotBundles();
 cleanup = restoreBundles;
 
 try {
-    const tjsc = buildHostTjsc();
+    const { tjsc, dir: hostDir } = buildHostTjsc();
+
+    if (opts['host-tjs']) {
+        buildHostTjs(hostDir);
+    }
 
     generateBundles(tjsc);
 

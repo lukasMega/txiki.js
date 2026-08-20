@@ -150,6 +150,20 @@ expectation, so they are meaningful on every profile and need no `feature-skip.j
 `test-builtin-module-gating.js` (a `tjs:` module is importable iff its feature is on) and
 `test-test-exe-override.js` (the suite really is running inside `TJS_TEST_EXE`).
 
+Some tests dlopen a fixture library built next to `tjs` (`libffi-test`, `libsqlite-test`),
+looked up under `./build` by default. Set **`TJS_TEST_LIBDIR`** when the driver lives elsewhere
+— without it those tests fail loudly rather than skipping. `scripts/build-dist.mjs --host-tjs`
+builds a driver plus those fixtures into `--host-dir` (default `build-host`) as part of a dist
+build, which is how CI gets one:
+
+```bash
+TJS_TEST_EXE=$(pwd)/dist/min/tjs TJS_TEST_LIBDIR=./build-host ./build-host/tjs test tests/
+```
+
+Never point `--host-dir` at your `./build`: it configures a feature-reduced tree, and `make`
+only passes `BUILDTYPE`/`MIMALLOC` (`Makefile:65`), so the cached options would silently
+survive into your next normal build.
+
 Test files must be named `test-*.js` and live in `tests/`. They use `tjs:assert` for assertions.
 
 **One test, one file.** Each test file should cover a single feature or behavior. Prefer
@@ -226,6 +240,20 @@ local-development path. Its output is byte-identical to
 `make -B core stdlib RUN_MAIN_DEFINES="…" TJSC_COMPRESS=-z`; keep it that way when changing
 either side. On MSVC six of the size/hardening levers are compiled out, so the Windows artifact
 is deliberately built and named as a different, non-hardened profile.
+
+Two workflows gate the slim builds, both running the *shipped* binary through the whole suite:
+
+- `.github/workflows/verify.yml` — every push/PR on `slim`, Linux only, 4 profiles. The fast
+  per-merge signal.
+- `.github/workflows/dist.yml` — 4 profiles × 4 platforms; the `release` job `needs: build`, so
+  a profile whose suite fails is never published.
+
+Both build with `--host-tjs` (driver + fixtures into `build-host`) and then run the suite with
+`TJS_TEST_EXE` and `TJS_TEST_LIBDIR` pointed at the artifact and that tree. The feature vector (`wasm`, `sqlite`,
+`webcrypto`, `ffi`, `tls`, `bundledCa`) is asserted by the smoke test *inside* `build-dist.mjs`,
+so a silently flipped CMake default fails at build time rather than as a confusing test failure.
+Read the job summary's SKIP count, not just the FAIL count: a profile can go green by skipping
+too much.
 
 ## Code Conventions
 

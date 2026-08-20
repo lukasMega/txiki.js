@@ -207,16 +207,18 @@ function testTransactionsNested() {
 }
 
 function testExtensions(){
-	let sopath = './build/libsqlite-test.so';
+	// See tests/helpers/ffi.js for TJS_TEST_LIBDIR.
+	const libDir = tjs.env.TJS_TEST_LIBDIR || './build';
+	let sopath = `${libDir}/libsqlite-test.so`;
 	switch(navigator.userAgentData.platform){
 		case 'Linux':
-			sopath = './build/libsqlite-test.so';
+			sopath = `${libDir}/libsqlite-test.so`;
 			break;
 		case 'macOS':
-			sopath = './build/libsqlite-test.dylib';
+			sopath = `${libDir}/libsqlite-test.dylib`;
 			break;
 		case 'Windows':
-			sopath = './build/libsqlite-test.dll';
+			sopath = `${libDir}/libsqlite-test.dll`;
 		break;
 	}
 
