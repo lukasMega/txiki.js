@@ -341,6 +341,46 @@ run = "ls -lh dist/*/tjs"
 description = "Run the full suite against a dist artifact, e.g. `mise run test:dist ffi`"
 run = 'TJS_TEST_EXE=$(pwd)/dist/{{arg(name="profile", default="ffi")}}/tjs ./build/tjs test tests/'
 
+# ---------------------------------------------------------------------------
+# Upstream sync. See .claude/plans/2026-08-19_fork-upstream-sync-reliability.md.
+# ---------------------------------------------------------------------------
+
+# Merge cadence is weekly, unconditionally: the cost of a merge is superlinear
+# in drift. At upstream's ~134 commits/90 d a weekly merge is ~10 commits; a
+# quarterly one is ~45 commits across the 39 files this fork also touches.
+[tasks."sync:upstream"]
+description = "Merge upstream/master into this branch, regenerating the bundles"
+run = """
+set -eu
+sh scripts/setup-repo.sh
+
+git fetch upstream
+git tag "pre-merge/$(date +%Y-%m-%d-%H%M)"
+
+if ! git merge upstream/master; then
+  echo
+  echo "conflicts outside the generated files -- resolve these, then run 'mise run sync:regen':"
+  git diff --name-only --diff-filter=U
+  exit 1
+fi
+
+mise run sync:regen
+"""
+
+# Separate task so it can be re-run by hand after a manual conflict resolution.
+# `make js` reads src/js/**, so it must run AFTER the last edit there and its
+# output must go into the merge commit. Running it before, or skipping it,
+# produces bundles that disagree with their sources -- CI's codegen job catches
+# that, but only after the push.
+[tasks."sync:regen"]
+description = "Regenerate the committed bundles from the merged sources"
+run = """
+set -eu
+make js
+git add src/bundles/c
+git status --porcelain --untracked-files=no
+"""
+
 [tasks."test:dist:all"]
 description = "Run the full suite against all four published profiles"
 run = """

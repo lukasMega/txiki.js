@@ -204,6 +204,30 @@ tracked** — the generated C arrays are committed, and CI's `codegen` job fails
 produces anything different. Any tool that regenerates bundles with non-default settings
 (compression, CLI gating) must restore them afterwards or it dirties the tree.
 
+### Syncing with upstream
+
+**Run `sh scripts/setup-repo.sh` once per clone.** It registers the `keep-ours` merge driver
+that `.gitattributes` names for `src/bundles/c/**` and `src/cacert.c`. Git ignores merge drivers
+defined in tracked config (a driver is arbitrary code), so a fresh clone has no idea what
+`merge=keep-ours` means and falls back to a normal text merge.
+
+That fallback is the one failure mode here that is *silent*. Those files are QuickJS bytecode
+byte-arrays and a compressed CA blob; a three-way text merge of either produces output valid for
+neither side, and git cannot tell. Nothing is lost by keeping ours: the bundles are pure
+functions of `src/js/**`, which merges normally, and are regenerated from the merged sources.
+
+```bash
+mise run sync:upstream   # setup-repo, tag a rollback point, merge, then `make js`
+mise run sync:regen      # re-run just the regeneration after a manual conflict fix
+```
+
+The order matters and is easy to get wrong: **`make js` reads `src/js/**`, so it must run after
+the last conflict there is resolved**, and its output belongs in the merge commit. CI's `codegen`
+job fails if you skip it, but only after the push.
+
+Note the driver only fires on modify/modify. A bundle file upstream changed and this fork did not
+merges trivially without ever consulting it.
+
 ### Dependencies (deps/)
 
 All vendored as git submodules: quickjs, libuv, mimalloc, sqlite3, libwebsockets, mbedtls, wamr, miniz, tweetnacl, ada.
