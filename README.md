@@ -54,27 +54,28 @@ compressed bytecode, no mimalloc and no WebAssembly. They differ only in whether
 SQLite are compiled in.
 
 Sizes are the **uncompressed `tjs` binary** from release
-[`slim-v26.6.0-6`](https://github.com/lukasMega/txiki.js-with-slim-builds/releases/tag/slim-v26.6.0-6),
+[`slim-v26.6.0-7`](https://github.com/lukasMega/txiki.js-with-slim-builds/releases/tag/slim-v26.6.0-7),
 measured from the published artifacts, in MiB:
 
 | profile | FFI | TLS | SQLite | linux-x86_64 | linux-arm64 | macos-arm64 | windows-x86_64 |
 | --- | :-: | :-: | :-: | ---: | ---: | ---: | ---: |
-| `min` | — | — | — | **1.83** | 2.08 | 1.92 | 2.30 |
+| `min` | — | — | — | **1.83** | 2.08 | 1.92 | 2.31 |
 | `ffi` | ✓ | — | — | 1.87 | 2.15 | 1.96 | 2.37 |
-| `tls` | — | ✓ | — | 2.25 | 2.58 | 2.37 | 2.78 |
-| `sqlite` | — | — | ✓ | *(new)* | *(new)* | *(new)* | *(new)* |
-| `ffi-tls` | ✓ | ✓ | — | 2.29 | 2.58 | 2.42 | 2.84 |
-| `ffi-tls-sqlite` | ✓ | ✓ | ✓ | *(new)* | *(new)* | *(new)* | *(new)* |
+| `tls` | — | ✓ | — | 2.25 | 2.58 | 2.37 | 2.79 |
+| `sqlite` | — | — | ✓ | 2.59 | 3.04 | 2.80 | 3.10 |
+| `ffi-tls` | ✓ | ✓ | — | 2.30 | 2.58 | 2.42 | 2.85 |
+| `ffi-tls-sqlite` | ✓ | ✓ | ✓ | 3.06 | 3.54 | 3.33 | 3.63 |
 | upstream `v26.6.0` | ✓ | ✓ | ✓ | *(no asset)* | *(no asset)* | 5.64 | 5.33 |
 
-The two SQLite profiles are new and have not been through a release yet; their sizes are filled
-in from the first published run. Locally on macos-arm64 `sqlite` measures 2.77 MiB — SQLite is
-the single most expensive optional feature here, roughly +0.85 MiB. Only these two profiles have
-a persistent `localStorage`; on the others it falls back to an in-memory store.
+SQLite is the single most expensive optional feature here — up to **+0.95 MiB** over `min`, more
+than TLS and the bundled CA together — which is why it is off in the other four profiles. Only
+the two SQLite profiles have a persistent `localStorage`; on the others it falls back to an
+in-memory store.
 
 Against upstream's own assets — the only directly comparable pair, since upstream publishes no
-Linux binary — `min` is **34%** of the full macOS build (**43%** on Windows), and `ffi-tls`,
-which keeps both optional subsystems, is **43%** (**53%** on Windows).
+Linux binary — `min` is **34%** of the full macOS build (**43%** on Windows). `ffi-tls-sqlite`,
+which is the closest match to what upstream ships, is **59%** (**68%** on Windows); `ffi-tls`,
+without SQLite, is **43%** (**53%**).
 
 Two caveats the numbers do not show:
 
