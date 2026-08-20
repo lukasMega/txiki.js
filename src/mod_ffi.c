@@ -65,13 +65,13 @@ static JSValue js_ffi_pointer_new(JSContext *ctx, void *ptr) {
 #define JS_TO_SIZE_T(ctx, pres, val)  JS_ToInt32(ctx, (int32_t *) (pres), val)
 #define JS_NEW_SIZE_T(ctx, val)       JS_NewInt32(ctx, (int32_t) (val))
 #define JS_PROP_SIZE_T_DEF(name, val) JS_PROP_INT32_DEF(name, (int32_t) (val), JS_PROP_CONFIGURABLE)
-#define C_SIZEOF_DEF(x) JS_PROP_INT32_DEF(STRINGIFY(sizeof_##x), (int32_t) (sizeof(x)), JS_PROP_CONFIGURABLE)
-#define ffi_type_size_t ffi_type_uint32
+#define C_SIZEOF_DEF(x)               JS_PROP_INT32_DEF(STRINGIFY(sizeof_##x), (int32_t) (sizeof(x)), JS_PROP_CONFIGURABLE)
+#define ffi_type_size_t               ffi_type_uint32
 #elif SIZE_MAX == UINT64_MAX
 #define JS_TO_SIZE_T(ctx, pres, val)  JS_ToInt64(ctx, (int64_t *) (pres), val)
 #define JS_NEW_SIZE_T(ctx, val)       JS_NewInt64(ctx, (int64_t) (val))
 #define JS_PROP_SIZE_T_DEF(name, val) JS_PROP_INT64_DEF(name, (int64_t) (val), JS_PROP_CONFIGURABLE)
-#define C_SIZEOF_DEF(x) JS_PROP_INT64_DEF(STRINGIFY(sizeof_##x), (int64_t) (sizeof(x)), JS_PROP_CONFIGURABLE)
+#define C_SIZEOF_DEF(x)               JS_PROP_INT64_DEF(STRINGIFY(sizeof_##x), (int64_t) (sizeof(x)), JS_PROP_CONFIGURABLE)
 #define C_OFFSETOF_DEF(t, d)                                                                                           \
     JS_PROP_INT64_DEF(STRINGIFY(offsetof_##t##_##d), (int64_t) (offsetof(t, d)), JS_PROP_CONFIGURABLE)
 #define ffi_type_size_t ffi_type_sint32
@@ -1309,7 +1309,7 @@ static JSValue js_deref_ptr(JSContext *ctx, JSValue this_val, int argc, JSValue 
 #define LIBC_NAME "libc.so"
 #define LIBM_NAME "libm.so"
 #else
-#error ('unknown os')
+#error('unknown os')
 #endif
 
 #pragma endregion "other helpers"
@@ -1779,18 +1779,18 @@ static JSValue tjs__mod_ffi_init_js(JSContext *ctx, JSValue this_val, int argc, 
     ADD_ALIAS_TYPE(ctx, ffiobj, type_size, type_uint64);
     ADD_ALIAS_TYPE(ctx, ffiobj, type_ssize, type_sint64);
 #else
-#error ("unhandled size_t size")
+#error("unhandled size_t size")
 #endif
 
 #if ULLONG_MAX == UINT64_MAX
     ADD_ALIAS_TYPE(ctx, ffiobj, type_ull, type_uint64);
 #else
-#error ("unhandled unsigned long long size")
+#error("unhandled unsigned long long size")
 #endif
 #if LLONG_MAX == INT64_MAX
     ADD_ALIAS_TYPE(ctx, ffiobj, type_sll, type_sint64);
 #else
-#error ("unhandled signed long long size")
+#error("unhandled signed long long size")
 #endif
 
     JSValue read_obj = JS_NewObject(ctx);
