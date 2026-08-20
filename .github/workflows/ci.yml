@@ -6,10 +6,18 @@ on:
       - 'website/**'
       - 'types/**'
 
+# Superseded pushes to a PR keep all 36 jobs running otherwise, starving the
+# next run: queue waits of 8m were routine. Only `pull_request` runs are
+# cancellable, so a push or manual dispatch always finishes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v7
       with:
@@ -33,6 +41,7 @@ jobs:
   codegen:
     name: Codegen
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -52,6 +61,7 @@ jobs:
   build-linux:
     name: Linux (${{ matrix.buildType }}, ${{ matrix.compiler }}, mimalloc=${{ matrix.mimalloc }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -91,8 +101,13 @@ jobs:
   build-macos:
     name: macOS (${{ matrix.buildType }}, ${{ matrix.os }}, mimalloc=${{ matrix.mimalloc }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
-      fail-fast: false
+      # macOS runners bill at 10x. The 8 combinations vary buildType, mimalloc
+      # and arch over the same source, so a genuine break shows up in all of
+      # them; letting the siblings run out is pure waste. The cost is that an
+      # arch-specific failure cancels its siblings -- re-run the single job.
+      fail-fast: true
       matrix:
         buildType: [Debug, Release]
         os: [macos-15, macos-15-intel]
@@ -119,6 +134,7 @@ jobs:
   build-alpine:
     name: Alpine Linux (${{ matrix.buildType }}, mimalloc=${{ matrix.mimalloc }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container: alpine:edge
     strategy:
       fail-fast: false
@@ -147,8 +163,13 @@ jobs:
   build-windows:
     name: Windows (${{ matrix.buildType }}, mimalloc=${{ matrix.mimalloc }})
     runs-on: windows-latest
+    timeout-minutes: 45
+    # ~10m each at 2x billing. Gate them on the two ~1m jobs so a formatting or
+    # codegen error costs 1m instead of running all four to completion.
+    needs: [lint, codegen]
     strategy:
-      fail-fast: false
+      # Same reasoning as the macOS matrix: 4 combinations over one source.
+      fail-fast: true
       matrix:
         buildType: [Debug, Release]
         mimalloc: [ON, OFF]
@@ -184,6 +205,7 @@ jobs:
   build-android:
     name: Android (${{ matrix.abi }}, ${{ matrix.buildType }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -210,6 +232,7 @@ jobs:
   asan-linux:
     name: ASAN (Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       CC: clang
       CXX: clang++
@@ -237,6 +260,7 @@ jobs:
   asan-macos:
     name: ASAN (macOS)
     runs-on: macos-15
+    timeout-minutes: 30
     env:
       ASAN_OPTIONS: detect_leaks=0:detect_odr_violation=0:abort_on_error=1:halt_on_error=1
     steps:
@@ -258,6 +282,9 @@ jobs:
   asan-windows:
     name: ASAN (Windows)
     runs-on: windows-latest
+    timeout-minutes: 60
+    # The longest job in the workflow (~12m) and 2x-billed; see build-windows.
+    needs: [lint, codegen]
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
@@ -296,6 +323,7 @@ jobs:
   ubsan-linux:
     name: UBSAN (Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       CC: clang
       CXX: clang++
@@ -324,6 +352,7 @@ jobs:
   ubsan-macos:
     name: UBSAN (macOS)
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v7
       with:
@@ -345,6 +374,11 @@ jobs:
   gc-stress-linux:
     name: GC Stress (Linux)
     runs-on: ubuntu-latest
+    # Must exceed the sum of its step budgets: the warm-cache step alone carries
+    # timeout-minutes: 30, so a smaller job budget would bind on a healthy run.
+    timeout-minutes: 60
+    # ~11m, and it builds the tree twice; see build-windows.
+    needs: [lint, codegen]
     env:
       CC: clang
       CXX: clang++

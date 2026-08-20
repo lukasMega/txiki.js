@@ -45,6 +45,13 @@ on:
       - '.github/workflows/dist.yml'
       - 'CMakeLists.txt'
 
+# Cancellation is guarded on the event rather than a flat `true`: the `release`
+# job uploads assets, so a second tag push must never cancel a publish in
+# flight. Only PR runs are superseded.
+concurrency:
+  group: dist-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: ${{ matrix.profile }} ${{ matrix.target.name }}
