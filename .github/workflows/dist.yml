@@ -3,8 +3,9 @@ name: Dist (slim binaries)
 # Builds every published slim `tjs` profile on every supported platform via the
 # portable Node driver (scripts/build-dist.mjs), runs the full test suite
 # against each built binary, then puts all of them on one Release. A profile
-# whose suite fails is never published. The size gate is report-only until real
-# per-platform numbers are recorded -- pass --enforce-size then.
+# whose suite fails is never published. The size gate is enforced on tag builds
+# and report-only elsewhere, so a legitimate growth shows up in the job summary
+# on a PR instead of blocking it.
 #
 # Profiles (--profile): min, ffi, tls, ffi-tls. They differ only in FFI and TLS;
 # all four are MinSizeRel + compressed bytecode + slim CLI, and keep WebCrypto,
@@ -119,12 +120,14 @@ jobs:
         if: runner.os != 'Windows'
         run: >-
           mise run dist -- --profile ${{ matrix.profile }} --out dist --host-tjs
+          ${{ startsWith(github.ref, 'refs/tags/') && '--enforce-size' || '' }}
 
       - name: Build (Windows)
         # node:util parseArgs refuses an option value that starts with a dash
         # unless it is written with `=`, so these cannot be split into two words.
         run: >
           node scripts/build-dist.mjs --profile ${{ matrix.profile }} --out dist --host-tjs
+          ${{ startsWith(github.ref, 'refs/tags/') && '--enforce-size' || '' }}
           "--cmake-arg=-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
           "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
         if: runner.os == 'Windows'
