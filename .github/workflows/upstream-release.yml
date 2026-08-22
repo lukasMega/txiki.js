@@ -31,6 +31,13 @@ on:
         required: false
         default: false
         type: boolean
+      force:
+        description: >-
+          Republish a release that already has slim tags, as the next -N. Skips
+          only the idempotency check; every publish gate still applies.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -78,17 +85,25 @@ jobs:
         id: published
         env:
           VERSION: ${{ steps.upstream.outputs.version }}
+          FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
           # matching-refs is a prefix match and 404s on no match, which is not an
           # error here.
           refs=$(gh api "repos/$REPO/git/matching-refs/tags/slim-v$VERSION-" \
                    --jq '.[].ref' 2>/dev/null || true)
-          if [ -n "$refs" ]; then
+          if [ -z "$refs" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$FORCE" = 'true' ]; then
+            # The only check `force` skips. Everything downstream -- the version
+            # assert, the green-verify requirement, dist.yml's 24 jobs -- still
+            # applies, which is what makes this safe to use as a rehearsal of the
+            # publish path before a real upstream release exercises it.
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::forced: republishing v$VERSION as the next -N"
+          else
             echo "proceed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::slim-v$VERSION-* already published; nothing to do"
-          else
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
           fi
           # Highest N seen, so the publish step can compute N+1 (normally 1).
           echo "max_n=$(printf '%s\n' "$refs" | sed -n "s#^refs/tags/slim-v$VERSION-\([0-9]*\)\$#\1#p" \
@@ -309,8 +324,7 @@ jobs:
           SHA: ${{ steps.contains.outputs.sha }}
         run: |
           set -euo pipefail
-          # Always 1 on this path -- the run would have stopped at `published`
-          # otherwise -- but computed anyway so a manual re-run behaves.
+          # 1 for a genuinely new release; the next free N under `force`.
           n=$(( ${MAX_N:-0} + 1 ))
           slim_tag="slim-v$VERSION-$n"
 
