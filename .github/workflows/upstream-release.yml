@@ -1,0 +1,337 @@
+name: upstream-release
+
+# Publishes `slim-vX.Y.Z-N` once upstream publishes `vX.Y.Z` and that release is
+# in `slim` without conflicts. Polls, because GitHub does not deliver another
+# repository's `release` event.
+#
+# Fourth in the daily chain: sync-upstream (04:30) -> merge-check (05:47) ->
+# auto-merge-pr (06:15) -> this (07:00). By the time upstream tags a release its
+# commits have usually been on `slim` for days, so the common path is "already
+# merged, just publish".
+#
+# Two gates stand between an upstream tag and a published release:
+#   * the merge lands as a PR labelled `auto-release`, which makes dist.yml run
+#     all 24 jobs on it (see its `gate` job) before --auto can merge it;
+#   * dist.yml's `release` job `needs: build`, so a platform that regresses
+#     means no release is created at all.
+# Every other failure mode exits 0 with a notice: this is a publisher, and a red
+# X here would compete with merge-check's issue for the same fact.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Upstream release tag to track (default: upstream latest)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Report what would happen; never push, merge or publish'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write        # gh workflow run dist.yml
+
+concurrency:
+  group: upstream-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.repository.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      UPSTREAM: saghul/txiki.js
+      DRY_RUN: ${{ inputs.dry_run }}
+      # `mise run` installs every tool in mise.toml first, and upstream publishes
+      # no Linux asset for the `ubi:saghul/txiki.js` pin.
+      MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
+    steps:
+      - name: Resolve the upstream release
+        id: upstream
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.upstream_tag }}'
+          # /releases/latest already excludes drafts and prereleases.
+          [ -n "$tag" ] || tag=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+
+          case "$tag" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::unexpected upstream release tag '$tag'"; exit 1 ;;
+          esac
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "upstream latest: $tag"
+
+      # The published tags are the state. A committed `last-seen` file would be a
+      # second source of truth, and the two can disagree.
+      - name: Has this release already been published?
+        id: published
+        env:
+          VERSION: ${{ steps.upstream.outputs.version }}
+        run: |
+          set -euo pipefail
+          # matching-refs is a prefix match and 404s on no match, which is not an
+          # error here.
+          refs=$(gh api "repos/$REPO/git/matching-refs/tags/slim-v$VERSION-" \
+                   --jq '.[].ref' 2>/dev/null || true)
+          if [ -n "$refs" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::slim-v$VERSION-* already published; nothing to do"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+          # Highest N seen, so the publish step can compute N+1 (normally 1).
+          echo "max_n=$(printf '%s\n' "$refs" | sed -n "s#^refs/tags/slim-v$VERSION-\([0-9]*\)\$#\1#p" \
+                        | sort -n | tail -1)" >> "$GITHUB_OUTPUT"
+
+      # submodules are only needed by `make js` on the merge path; initialising
+      # them here would cost several minutes on every no-op run.
+      - uses: actions/checkout@v7
+        if: steps.published.outputs.proceed == 'true'
+        with:
+          ref: slim
+          fetch-depth: 0        # a merge base cannot be computed from a shallow clone
+          submodules: false
+
+      - name: Is the release already in slim?
+        id: contains
+        if: steps.published.outputs.proceed == 'true'
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # FIRST, always: without the merge drivers a three-way text merge of a
+          # QuickJS bytecode array is wrong output with no conflict to warn you.
+          sh scripts/setup-repo.sh
+          git config user.name  'upstream-release'
+          git config user.email 'upstream-release@users.noreply.github.com'
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          # Into a namespaced local ref: this fork syncs upstream's tags onto
+          # master, so a local `vX.Y.Z` already exists and need not be the same
+          # object as upstream's.
+          git fetch --no-tags --force upstream "refs/tags/$TAG:refs/tags/upstream-$TAG"
+
+          if git merge-base --is-ancestor "upstream-$TAG" HEAD; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            echo "slim already contains $TAG"
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            echo "behind=$(git rev-list --count "HEAD..upstream-$TAG")" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ---------------------------------------------------------------- merge
+
+      - name: Dry-run the merge
+        id: dryrun
+        if: steps.published.outputs.proceed == 'true' && steps.contains.outputs.merged == 'false'
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          set -uo pipefail
+          # The release tag, not upstream/master: the tag is the thing being
+          # released, and master is usually already ahead with unreleased churn.
+          if git merge --no-commit --no-ff "upstream-$TAG" >/dev/null 2>&1; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            # merge-check owns conflict reporting; do not open a second channel
+            # for the same fact.
+            echo "::notice::$TAG conflicts with slim -- see the upstream-merge issue; resolve with 'mise run sync:upstream'"
+          fi
+          git merge --abort || true
+
+      - name: Is a proposal already open?
+        id: open_pr
+        if: steps.dryrun.outputs.clean == 'true'
+        run: |
+          set -euo pipefail
+          n=$(gh pr list --repo "$REPO" --base slim --state open --json number,headRefName \
+                --jq '[.[] | select(.headRefName
+                       | startswith("chore/upstream-release-") or startswith("chore/upstream-merge-"))][0].number // empty')
+          if [ -n "$n" ]; then
+            echo "::notice::PR #$n is already proposing an overlapping merge"
+          fi
+          echo "number=$n" >> "$GITHUB_OUTPUT"
+
+      - name: Setup mise
+        if: steps.dryrun.outputs.clean == 'true' && steps.open_pr.outputs.number == ''
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Fetch submodules and npm dependencies
+        if: steps.dryrun.outputs.clean == 'true' && steps.open_pr.outputs.number == ''
+        run: |
+          set -euo pipefail
+          git submodule update --init --recursive
+          npm install --ignore-scripts
+
+      # Left uncommitted so `make js` output lands *in* the merge commit: it
+      # reads src/js/**, so it must run after the last merged edit there, and
+      # codegen fails on a merge commit whose bundles disagree with sources.
+      - name: Merge the release and regenerate the bundles
+        id: merge
+        if: steps.dryrun.outputs.clean == 'true' && steps.open_pr.outputs.number == ''
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+          BEHIND: ${{ steps.contains.outputs.behind }}
+        run: |
+          set -euo pipefail
+          branch="chore/upstream-release-$TAG"
+          # A merged-and-deleted proposal for the same tag would make the push
+          # fail on a stale remote ref; the run number keeps it unique.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            branch="$branch-${{ github.run_number }}"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+          git switch -c "$branch"
+          git merge --no-commit --no-ff "upstream-$TAG"
+          make js
+          # Explicit paths, never `git add -A`: `.gitignore` hides a stale index
+          # entry from `git status` rather than protecting you from it.
+          git add src/bundles/c
+          git commit --no-edit -m "chore: merge upstream release $TAG ($BEHIND commits)"
+
+          {
+            echo "### proposed upstream release merge"
+            echo
+            echo "\`$TAG\` — branch \`$branch\` — $BEHIND commits"
+            echo
+            echo '```'
+            git show --stat --oneline HEAD | head -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$DRY_RUN" = 'true' ]; then
+            echo "::notice::dry run -- not pushing $branch"
+            exit 0
+          fi
+          git push origin "$branch"
+
+      - name: Open the PR
+        if: steps.merge.outputs.branch != '' && inputs.dry_run != true
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+          BRANCH: ${{ steps.merge.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # `gh pr list --label` errors out on a label that does not exist yet,
+          # and dist.yml's gate keys on this one.
+          gh label create auto-release --repo "$REPO" --color 0e8a16 \
+            --description 'Upstream release merge; runs the full dist matrix' 2>/dev/null || true
+
+          cat > pr-body.md <<EOF
+          Opened by \`upstream-release\` for upstream **$TAG**. The dry-run merge was clean and
+          the bundles were regenerated with \`make js\` **inside the merge commit**, so
+          \`codegen\` should pass.
+
+          The \`auto-release\` label makes \`dist.yml\` build all six profiles on all four
+          platforms for this PR — \`verify.yml\` alone is Linux-only, and this merge is the one
+          that gets published. Auto-merge is enabled; branch protection decides when it lands.
+
+          Once it is on \`slim\`, the next \`upstream-release\` run tags \`slim-${TAG#v}-1\` and
+          \`dist.yml\` publishes it.
+          EOF
+
+          url=$(gh pr create --repo "$REPO" --base slim --head "$BRANCH" \
+            --label auto-release \
+            --title "chore: merge upstream release $TAG" \
+            --body-file pr-body.md)
+          echo "::notice::$url"
+          # Non-fatal: the PR is already open and reviewable, and this fails on a
+          # repo where auto-merge is disabled -- a setting, not a bug in the run.
+          gh pr merge --repo "$REPO" --auto --merge "$url" \
+            || echo "::warning::could not enable auto-merge; merge $url by hand"
+
+      # -------------------------------------------------------------- publish
+
+      # Upstream tagging something other than what it bumped is the one case
+      # where a red X is correct: publishing under the wrong version is worse
+      # than not publishing.
+      - name: Assert the merged version matches the tag
+        if: steps.contains.outputs.merged == 'true'
+        env:
+          VERSION: ${{ steps.upstream.outputs.version }}
+        run: |
+          set -euo pipefail
+          field() { grep -m1 "set(TJS__VERSION_$1 " CMakeLists.txt | tr -dc '0-9'; }
+          have="$(field MAJOR).$(field MINOR).$(field PATCH)"
+          if [ "$have" != "$VERSION" ]; then
+            echo "::error::slim is at $have but upstream released $VERSION"
+            exit 1
+          fi
+          echo "version matches: $have"
+
+      - name: Require a green slim
+        id: green
+        if: steps.contains.outputs.merged == 'true'
+        env:
+          SHA: ${{ steps.contains.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Keyed on the workflow file, not on check-run names, which change
+          # whenever a matrix leg is renamed. Newest run first.
+          concl=$(gh api "repos/$REPO/actions/workflows/verify.yml/runs?head_sha=$SHA&status=completed&per_page=1" \
+                    --jq '.workflow_runs[0].conclusion // empty')
+          if [ "$concl" != 'success' ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::verify.yml on $SHA is '${concl:-missing}', not success -- not publishing"
+            exit 0
+          fi
+          # The checkout is a snapshot; `slim` may have moved since, and the
+          # dispatch below can only name a branch.
+          head=$(git ls-remote origin refs/heads/slim | cut -f1)
+          if [ "$head" != "$SHA" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::slim moved to $head during this run -- retrying tomorrow"
+            exit 0
+          fi
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        if: steps.green.outputs.proceed == 'true'
+        env:
+          VERSION: ${{ steps.upstream.outputs.version }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+          MAX_N: ${{ steps.published.outputs.max_n }}
+          SHA: ${{ steps.contains.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Always 1 on this path -- the run would have stopped at `published`
+          # otherwise -- but computed anyway so a manual re-run behaves.
+          n=$(( ${MAX_N:-0} + 1 ))
+          slim_tag="slim-v$VERSION-$n"
+
+          {
+            echo "### upstream-release"
+            echo
+            echo "upstream \`$TAG\` -> \`$slim_tag\` on \`${SHA:0:12}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$DRY_RUN" = 'true' ]; then
+            echo "::notice::dry run -- would dispatch dist.yml for $slim_tag"
+            exit 0
+          fi
+
+          # NOT `git push origin "$slim_tag"`: a push made with GITHUB_TOKEN does
+          # not start a workflow run, so the tag would sit there and dist.yml
+          # would never fire. workflow_dispatch is one of the two documented
+          # exceptions to that rule, so this works with the default token.
+          # dist.yml creates the tag as part of creating the release, and its
+          # `release` job needs `build`, so a failed matrix leaves no tag and the
+          # next run retries cleanly.
+          gh workflow run dist.yml --repo "$REPO" --ref slim \
+            -f release_tag="$slim_tag" -f prerelease=false
+          echo "::notice::dispatched dist.yml for $slim_tag"

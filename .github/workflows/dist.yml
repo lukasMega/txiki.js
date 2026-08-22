@@ -34,11 +34,11 @@ on:
       - "slim-sqlite-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-ffi-tls-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-ffi-tls-sqlite-v[0-9]+.[0-9]+.[0-9]+*"
+  # Unfiltered on purpose -- the path filter lives in the `gate` job below,
+  # because `on.pull_request` ANDs `paths` with `types` and cannot express
+  # "these paths OR this label".
   pull_request:
-    paths:
-      - 'scripts/build-dist.mjs'
-      - '.github/workflows/dist.yml'
-      - 'CMakeLists.txt'
+    types: [ opened, synchronize, reopened, labeled ]
 
 # Guarded on the event, not a flat `true`: `release` uploads assets, so a second
 # tag push must never cancel a publish in flight.
@@ -47,8 +47,50 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides whether a pull_request event deserves the 24-job matrix. Two ways in:
+  # the PR touches something that changes what gets built, or it carries the
+  # `auto-release` label -- the upstream-release proposal, which must have the
+  # full four-platform signal before it lands on `slim`, not verify.yml's
+  # Linux-only six.
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTO_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'auto-release') }}
+        run: |
+          set -euo pipefail
+          decide() { echo "run=$1" >> "$GITHUB_OUTPUT"; echo "run=$1"; exit 0; }
+
+          [ "$EVENT" = 'pull_request' ] || decide true
+
+          if [ "$AUTO_RELEASE" = 'true' ]; then
+            echo '::notice::auto-release PR -- running the full matrix'
+            decide true
+          fi
+
+          # `gh pr diff --name-only` would need a checkout; the API does not.
+          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > changed.txt
+          if grep -qxE 'scripts/build-dist\.mjs|\.github/workflows/dist\.yml|CMakeLists\.txt' changed.txt; then
+            decide true
+          fi
+          decide false
+
   build:
     name: ${{ matrix.profile }} ${{ matrix.target.name }}
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ${{ matrix.target.os }}
     timeout-minutes: 90
     strategy:
