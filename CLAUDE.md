@@ -325,15 +325,53 @@ job fails if you skip it, but only after the push.
 Note the driver only fires on modify/modify. A bundle file upstream changed and this fork did not
 merges trivially without ever consulting it.
 
-## mbedtls is patched in place
+### The daily chain
 
-Upstream mbedTLS has no QUIC support, so `CMakeLists.txt` applies `patches/mbedtls-quic.patch`
-(from warmcat's mbedTLS QUIC branch) to the submodule work tree at configure time. It is
-idempotent — forward `git apply --check`, else reverse-check — so `deps/mbedtls` permanently
-shows ~11 modified files. That is expected, and `.gitmodules` sets `ignore = dirty` for it so
-`git status` stays quiet. Do not commit or revert those edits; if configure ever reports the
-patch "neither applies nor is already applied" (e.g. after bumping the submodule), reset with
-`git -C deps/mbedtls checkout .`.
+Four scheduled workflows, in order. Each recomputes what it needs — workflow outputs do not
+cross runs, and a stale answer is worse than a spare `git merge --no-commit`. Every one of them
+runs `sh scripts/setup-repo.sh` first, for the reason above.
+
+| cron (UTC) | workflow | does | on failure |
+| --- | --- | --- | --- |
+| 04:30 | `sync-upstream.yml` | fast-forwards `master` via the REST merge-upstream endpoint, which refuses to act on a diverged branch | warns |
+| 05:47 | `merge-check.yml` | dry-runs the merge into `slim`; owns the single reused `upstream-merge` issue | annotates |
+| 06:15 | `auto-merge-pr.yml` | opens `chore/upstream-merge-<date>` when the dry-run is clean. A human clicks merge | notice |
+| 07:00 | `upstream-release.yml` | publishes `slim-vX.Y.Z-N` once upstream releases `vX.Y.Z` and `slim` contains it | notice |
+
+Nothing in the chain ever pushes to `slim`; every merge is offered as a PR. Schedules routinely
+lag 15–30 minutes here, which the ordering tolerates but does not guarantee — `upstream-release`
+stands down when an `auto-merge-pr` proposal is still open, and vice versa.
+
+`upstream-release` polls, because GitHub does not deliver another repository's `release` event.
+Its state is the set of published `slim-vX.Y.Z-*` tags, not a committed last-seen file that could
+disagree. The common path is a no-op: by the time upstream tags, those commits have usually been
+on `slim` for days, so it only has to tag. Three things gate a publish — the merged
+`TJS__VERSION_*` must equal the released version (the one hard error; the rest exit 0 with a
+notice), `verify.yml` must have concluded `success` on that exact sha, and `slim` must not have
+moved during the run.
+
+It publishes by dispatching `dist.yml`, **not** by pushing the tag: a push made with
+`GITHUB_TOKEN` does not start a workflow run, so the tag would sit there and `dist.yml` would
+never fire. `workflow_dispatch` is one of the two documented exceptions, which is what keeps this
+working without a PAT.
+
+## Submodules are patched in place
+
+`CMakeLists.txt`'s `tjs_apply_patches(<submodule> <prefix>)` globs `patches/<prefix>*.patch`
+and applies each to the submodule work tree at configure time. It is idempotent — forward
+`git apply --check`, else reverse-check — and a state that is neither is a `FATAL_ERROR`, not
+a silent skip. Two call sites today:
+
+- `mbedtls-` → `patches/mbedtls-quic.patch`, QUIC support upstream mbedTLS lacks (from
+  warmcat's mbedTLS QUIC branch). Leaves `deps/mbedtls` permanently showing ~11 modified files.
+- `lws-` → `patches/lws-mbedtls-client-alpn-uaf.patch`, a stack-use-after-scope on the
+  HTTP/3→TCP fallback path (warmcat/libwebsockets#3658).
+
+`.gitmodules` sets `ignore = dirty` on both so `git status` stays quiet. Do not commit or
+revert those edits. If configure reports a patch "neither applies nor is already applied"
+(e.g. after bumping the submodule), reset with `git -C deps/<name> checkout .`. Each patch is
+upstreamed — delete the file once the submodule is bumped past its merge, and the call too
+once no patch shares its prefix.
 
 ## Distribution builds (CI)
 
@@ -352,6 +390,13 @@ Two workflows gate the slim builds, both running the *shipped* binary through th
   per-merge signal.
 - `.github/workflows/dist.yml` — 6 profiles × 4 platforms; the `release` job `needs: build`, so
   a profile whose suite fails is never published.
+
+`dist.yml`'s matrix is fronted by a `gate` job. `on.pull_request` is deliberately unfiltered
+there: GitHub ANDs `paths` with `types`, so a `labeled` event on a PR touching none of those
+paths never starts the workflow at all. `gate` therefore re-implements the path filter against
+`pulls/{n}/files`, and short-circuits to "run" on the `auto-release` label. Note a *skipped*
+required check counts as a pass in branch protection, so dropping that label from a release PR
+silently bypasses the four-platform signal.
 
 Both build with `--host-tjs` (driver + fixtures into `build-host`) and then run the suite with
 `TJS_TEST_EXE` and `TJS_TEST_LIBDIR` pointed at the artifact and that tree. The feature vector (`wasm`, `sqlite`,
