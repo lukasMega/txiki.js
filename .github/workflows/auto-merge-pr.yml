@@ -67,10 +67,12 @@ jobs:
           fi
 
           # One open proposal at a time: a second PR for the same merge is a
-          # stale duplicate the moment the first lands.
+          # stale duplicate the moment the first lands. `upstream-release` opens
+          # its own overlapping merge under a different prefix, so both count.
           open_pr=$(gh pr list --repo "$REPO" --base slim --state open \
             --json number,headRefName \
-            --jq '[.[] | select(.headRefName | startswith("chore/upstream-merge-"))][0].number // empty')
+            --jq '[.[] | select(.headRefName
+                   | startswith("chore/upstream-merge-") or startswith("chore/upstream-release-"))][0].number // empty')
           if [ -n "$open_pr" ]; then
             echo "proceed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::PR #$open_pr is already proposing an upstream merge"
