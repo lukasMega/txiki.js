@@ -8,6 +8,7 @@ export default [
         ignores: [
             '.claude/**',
             'benchmark/**',
+            'bench-trees/**',
             'build/**',
             'deps/**',
             'docs/**',
