@@ -342,6 +342,15 @@ Nothing in the chain ever pushes to `slim`; every merge is offered as a PR. Sche
 lag 15–30 minutes here, which the ordering tolerates but does not guarantee — `upstream-release`
 stands down when an `auto-merge-pr` proposal is still open, and vice versa.
 
+Both branch-pushing steps also stand down when the merge touches `.github/workflows/**`, and say
+so with a notice. This is not a bug to fix by retrying: `workflows` is not one of the permissions
+a `GITHUB_TOKEN` can be granted — there is no such key — so the push is rejected outright
+(`refusing to allow a GitHub App to create or update workflow ...`), and it is rejected *after*
+the merge and `make js` have already run. Upstream's dependabot bumps its workflow actions
+regularly, so this fires often; merge those locally with `mise run sync:upstream`. Lifting the
+restriction means a PAT or GitHub App token with workflow scope, which is a deliberate decision to
+put a long-lived push credential in the repo, not a config tweak.
+
 `upstream-release` polls, because GitHub does not deliver another repository's `release` event.
 Its state is the set of published `slim-vX.Y.Z-*` tags, not a committed last-seen file that could
 disagree. The common path is a no-op: by the time upstream tags, those commits have usually been
