@@ -154,6 +154,20 @@ jobs:
           TAG: ${{ steps.upstream.outputs.tag }}
         run: |
           set -uo pipefail
+          # `clean` here means "clean *and* pushable". A merge touching
+          # .github/workflows/** is neither: `workflows` is not one of the
+          # permissions a GITHUB_TOKEN can be granted (there is no such key), so
+          # the branch push below would be rejected after `make js` had already
+          # run. Same stand-down as auto-merge-pr; the publish half of this
+          # workflow (which only tags) is unaffected.
+          wf=$(git diff --name-only "HEAD...upstream-$TAG" -- .github/workflows)
+          if [ -n "$wf" ]; then
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$TAG touches .github/workflows -- GITHUB_TOKEN cannot push those; merge it locally with 'mise run sync:upstream'"
+            printf '%s\n' "$wf"
+            exit 0
+          fi
+
           # The release tag, not upstream/master: the tag is the thing being
           # released, and master is usually already ahead with unreleased churn.
           if git merge --no-commit --no-ff "upstream-$TAG" >/dev/null 2>&1; then

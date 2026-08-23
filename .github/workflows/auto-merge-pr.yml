@@ -66,6 +66,32 @@ jobs:
             exit 0
           fi
 
+          # A merge that touches .github/workflows/** cannot be pushed from
+          # here: `workflows` is not one of the permissions a GITHUB_TOKEN can
+          # be granted (there is no such key), so the push at the end of this
+          # job is rejected -- after the merge and `make js` have already run.
+          # Upstream's dependabot bumps its workflow actions regularly, so this
+          # is a routine stand-down, not a failure. Bail before doing the work.
+          wf=$(git diff --name-only "HEAD...upstream/master" -- .github/workflows)
+          if [ -n "$wf" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::merge touches .github/workflows -- GITHUB_TOKEN cannot push those; merge it locally with 'mise run sync:upstream'"
+            {
+              echo "### stood down: upstream merge touches workflow files"
+              echo
+              echo "\`GITHUB_TOKEN\` cannot push \`.github/workflows/**\`. Merge locally:"
+              echo '```'
+              echo 'mise run sync:upstream'
+              echo '```'
+              echo
+              echo "Files:"
+              echo '```'
+              printf '%s\n' "$wf"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           # One open proposal at a time: a second PR for the same merge is a
           # stale duplicate the moment the first lands. `upstream-release` opens
           # its own overlapping merge under a different prefix, so both count.
