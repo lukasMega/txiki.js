@@ -188,6 +188,21 @@ jobs:
       - name: Install npm dependencies
         run: npm install --ignore-scripts
 
+      # The Linux runners default to GCC, where BUILD_WITH_OZ only warns and
+      # keeps -Os and the machine outliner does not exist -- so the Linux
+      # artifacts were never getting the codegen they are documented as having,
+      # and tuned-min was a byte-identical duplicate of min there.
+      #
+      # A conditional step writing to $GITHUB_ENV, not a job-level `env:` with an
+      # expression: build-dist.mjs's detectMsvc() reads process.env.CC and treats
+      # an EMPTY value as MSVC, so an expression evaluating to '' on the macOS
+      # and Windows legs would silently disable every non-MSVC flag.
+      - name: Select clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
       # --host-tjs also builds the full-CLI driver and the test fixtures into
       # build-host; the artifact cannot run the suite itself.
       - name: Build (Unix)
