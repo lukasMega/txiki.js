@@ -29,6 +29,7 @@ Object.defineProperty(tjs.engine, 'cli', {
     configurable: false,
     writable: false,
     value: Object.freeze({
+        repl: __TJS_REPL__,
         eval: __TJS_EVAL__,
         serve: __TJS_SERVE__,
         bundler: __TJS_BUNDLER__,
@@ -317,10 +318,15 @@ if (!isBundled) {
         const [ command, ...subargv ] = options._;
 
         if (!command) {
-            if (tjs.stdin.isTerminal) {
+            // Ordered so --minify-syntax collapses this to the piped path plus
+            // one branch: `core.runRepl` does not exist on a BUILD_WITH_REPL=OFF
+            // binary, so the call must be unreachable, not merely unused.
+            if (!tjs.stdin.isTerminal) {
+                evalStdin();
+            } else if (__TJS_REPL__) {
                 core.runRepl();
             } else {
-                evalStdin();
+                throw new Error('this build has no REPL; pass a script to run, or pipe one in');
             }
         } else if (__TJS_EVAL__ && command === 'eval') {
             const [ expr ] = subargv;

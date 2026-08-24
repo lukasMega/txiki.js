@@ -180,10 +180,25 @@ BUILD_WITH_WEBCRYPTO=OFF make   # LITE profile only, WinterTC-breaking: drops cr
                                  # `tjs app pack`/`tjs app compile`, which hash the package via
                                  # crypto.subtle.digest.
 BUILD_WITH_FFI=OFF make         # Disable libffi (drops the tjs:ffi module)
+BUILD_WITH_REPL=OFF make        # Drop the interactive REPL. MUST be paired with
+                                 # `make js RUN_MAIN_DEFINES="… __TJS_REPL__=false …"`
+
 ```
 
 The active set is readable at runtime from `tjs.engine.features`
 (`wasm`, `sqlite`, `tls`, `bundledCa`, `webcrypto`, `ffi`).
+
+`BUILD_WITH_REPL` is the odd one out and reports through `tjs.engine.cli.repl`, not `features`:
+the REPL is a CLI subcommand, and it is the only one with a C dimension. The CMake option drops
+`src/bundles/c/core/run-repl.c` from the target and compiles `core.runRepl` out of `src/mod_sys.c`;
+the matching `--define:__TJS_REPL__=false` removes the dispatch branch that calls it. **Both halves
+or neither** — the define alone leaves ~14 KB of unreachable bytecode linked in, and the CMake
+option alone leaves JS calling a binding that no longer exists. `scripts/build-dist.mjs` drives
+both from one `REPL` constant so they cannot drift.
+
+Worth knowing before you reach for it: the measured saving is **~16.6 KB** on a Release build
+(14,031 B of bytecode plus the binding and the dispatch branch), not the "~80 KB" an older plan
+claimed — that figure was the size of the generated C *source* file, not the array inside it.
 
 **Every option this fork adds lives in `cmake/slim.cmake`**, not in `CMakeLists.txt` — upstream
 edits `CMakeLists.txt` constantly, so the fork's delta there is deliberately kept to one

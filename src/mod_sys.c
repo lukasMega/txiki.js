@@ -29,8 +29,10 @@
 #include <string.h>
 #include <uv.h>
 
+#ifndef TJS_NO_REPL
 extern const uint8_t tjs__run_repl[];
 extern const uint32_t tjs__run_repl_size;
+#endif
 
 
 static JSValue tjs_evalFile(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
@@ -86,11 +88,13 @@ static JSValue tjs_print(JSContext *ctx, JSValue this_val, int argc, JSValue *ar
     return JS_UNDEFINED;
 }
 
+#ifndef TJS_NO_REPL
 static JSValue tjs_runRepl(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
     tjs__eval_bytecode(ctx, tjs__run_repl, tjs__run_repl_size, false);
 
     return JS_UNDEFINED;
 }
+#endif
 
 static JSValue tjs_isArrayBuffer(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
     return JS_NewBool(ctx, JS_IsArrayBuffer(argv[0]));
@@ -178,7 +182,9 @@ static const JSCFunctionListEntry tjs_sys_funcs[] = {
     TJS_CFUNC_DEF("evalScript", 1, tjs_evalScript),
     TJS_CFUNC_DEF("loadScript", 1, tjs_loadScript),
     TJS_CFUNC_DEF("randomUUID", 0, tjs_randomUUID),
+#ifndef TJS_NO_REPL
     TJS_CFUNC_DEF("runRepl", 0, tjs_runRepl),
+#endif
     TJS_CFUNC_DEF("isArrayBuffer", 1, tjs_isArrayBuffer),
     TJS_CFUNC_DEF("detachArrayBuffer", 1, tjs_detachArrayBuffer),
     TJS_CFUNC_MAGIC_DEF("stdoutPrint", 1, tjs_print, 0),

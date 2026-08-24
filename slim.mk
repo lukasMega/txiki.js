@@ -28,7 +28,13 @@ endif
 # (full CLI). The untracked slim.sh wrapper overrides this on the command line
 # (make RUN_MAIN_DEFINES="...") to compile commands out via esbuild dead-code
 # elimination. See .claude/plans/2026-06-17_cli-command-removal.md.
+#
+# __TJS_REPL__ is the one entry here with a C half: it must be paired with
+# -DBUILD_WITH_REPL=OFF, which drops run-repl.c and core.runRepl. Setting only
+# this one leaves ~80 KB of unreachable REPL bytecode in the binary; setting
+# only the CMake one leaves JS calling a function that no longer exists.
 RUN_MAIN_DEFINES ?= \
+	--define:__TJS_REPL__=true \
 	--define:__TJS_EVAL__=true \
 	--define:__TJS_SERVE__=true \
 	--define:__TJS_BUNDLER__=true \
