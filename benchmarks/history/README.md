@@ -1,8 +1,8 @@
 # Result history
 
 `bench.mjs` writes one JSON per run to `<platform>/<version>.json`, e.g.
-`linux-x86_64/slim-v26.6.0-7.json`. `report.mjs` (phase P3, not yet written) reads every file
-here plus the newest run and regenerates `../README.md`.
+`linux-x86_64/slim-v26.6.0-7.json`. `report.mjs` reads every `*.json` here (recursively, in
+sorted path order) plus the newest run and regenerates `../README.md`.
 
 Nothing is committed here yet. Per phase **P5**, history is committed back **only from tag
 runs** in `bench.yml`, never from a PR run and never from a local run — a local result is
@@ -17,4 +17,5 @@ To produce one locally without touching this directory, pass `--out`:
 
 ```sh
 node benchmarks/bench.mjs --binary full=./build/tjs --out /tmp/bench.json
+node benchmarks/report.mjs --latest /tmp/bench.json    # folds it in without storing it here
 ```

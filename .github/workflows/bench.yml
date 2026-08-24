@@ -1,0 +1,132 @@
+name: Bench
+
+# Phases P4/P6 of .claude/plans/2026-08-20_ci-benchmark-suite.md. Measures the
+# published slim profiles against a full default build and writes the tables into
+# the job summary.
+#
+# It is REPORT-ONLY and gates nothing. Runner noise on shared CI is larger than
+# most of the differences worth acting on -- METHODOLOGY.md puts a ±10% wall-clock
+# move inside the noise floor -- so a red bench job would mostly teach people to
+# ignore it. Read the ratios, not the absolute milliseconds.
+#
+# P5 (committing benchmarks/history/** back on tag runs) is deliberately NOT
+# implemented here. Every other workflow in this fork offers its changes as a PR
+# and nothing auto-pushes to `slim`; a history commit-back would be the first
+# exception, and it would also hit the same GITHUB_TOKEN workflow-scope wall
+# documented in CLAUDE.md the moment it touched anything under .github/. The
+# results upload as an artifact instead, and seeding history is a human step.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profiles:
+        description: 'Which binaries to measure: extremes (full+min+ffi-tls) or all'
+        required: false
+        default: extremes
+        type: choice
+        options: [ extremes, all ]
+  pull_request:
+    paths:
+      - 'benchmarks/**'
+      - '.github/workflows/bench.yml'
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bench:
+    name: bench ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # Both legs on every trigger. macOS is noisier and doubles the cost,
+          # but it is where the recorded size baselines live and the only
+          # platform with an official upstream asset to compare against.
+          - { name: linux-x86_64, os: ubuntu-24.04 }
+          - { name: macos-arm64, os: macos-15 }
+    env:
+      MISE_DISABLE_TOOLS: 'ubi:saghul/txiki.js'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          # `time` is GNU /usr/bin/time, which lib/proc.mjs uses for max RSS;
+          # the shell builtin cannot report it.
+          sudo apt install -y libffi-dev time
+
+      - name: Select clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
+      - name: Install npm dependencies
+        run: npm install --ignore-scripts
+
+      # The full default build is the reference every ratio is taken against.
+      - name: Build full
+        run: make
+
+      # bench.mjs measures binaries and never builds, precisely so it cannot
+      # rewrite src/bundles/ (tracked in this fork) as a side effect. The dist
+      # builds therefore happen here, and each one restores the bundles after
+      # itself -- assert that between builds rather than trusting it.
+      - name: Build the dist profiles
+        run: |
+          set -eu
+          if [ '${{ inputs.profiles }}' = 'all' ]; then
+            profiles='min ffi tls ffi-tls'
+          else
+            profiles='min ffi-tls'
+          fi
+          for p in $profiles; do
+            node scripts/build-dist.mjs --profile "$p" \
+              --build-dir "build-bench-$p" --out "dist/$p"
+            if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+              echo "::error::$p left the tree dirty; src/bundles was not restored"
+              git status --porcelain --untracked-files=no
+              exit 1
+            fi
+          done
+
+      - name: Measure
+        run: |
+          set -eu
+          args='--binary full=./build/tjs'
+          for d in dist/*/; do
+            p="${d%/}"; p="${p#dist/}"
+            args="$args --binary $p=./dist/$p/tjs"
+          done
+          # shellcheck disable=SC2086
+          node benchmarks/bench.mjs $args --out "bench-${{ matrix.target.name }}.json"
+
+      # --out to a scratch file, not benchmarks/README.md: this run's numbers are
+      # a PR/dispatch measurement, and the committed README is generated from
+      # history/, which nothing here writes to.
+      - name: Report
+        run: |
+          node benchmarks/report.mjs \
+            --latest "bench-${{ matrix.target.name }}.json" \
+            --out "bench-report-${{ matrix.target.name }}.md"
+          cat "bench-report-${{ matrix.target.name }}.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # The results are the artifact; seeding benchmarks/history/** from them is
+      # a deliberate human step (see the P5 note at the top).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-${{ matrix.target.name }}
+          path: bench-${{ matrix.target.name }}.json
