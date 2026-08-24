@@ -96,6 +96,7 @@ another.
 |-------------------------------------|---------|-------------------------------------------------------------------------------|
 | `BUILD_WITH_OZ=ON`                  | OFF     | Use Clang's `-Oz` (more aggressive than `-Os`) in MinSizeRel builds           |
 | `BUILD_WITH_NO_OUTLINE=ON`          | OFF     | Disable Clang's AArch64 machine outliner (bigger, much faster at `-Oz`)       |
+| `BUILD_WITH_QJS_SPEED=ON`           | OFF     | Compile `deps/quickjs` at `-Os` while the rest of the binary stays at `-Oz`   |
 | `BUILD_WITH_HIDDEN_VISIBILITY=ON`   | OFF     | Compile with `-fvisibility=hidden` so the linker/LTO can prune more           |
 | `BUILD_WITH_ICF=ON`                 | OFF     | Identical-code folding at link (lld/gold; ELF only)                           |
 | `BUILD_WITH_COMPRESSED_BYTECODE=ON` | OFF     | Deflate the embedded JS bytecode, inflated lazily at load                     |
@@ -118,13 +119,19 @@ Notes:
 - `BUILD_WITH_HIDDEN_VISIBILITY`, `BUILD_WITH_REPRODUCIBLE_PATHS`, `BUILD_WITH_HARDENING` and
   `BUILD_WITH_NO_UNWIND_TABLES` are all skipped on MSVC, where the underlying compiler flags do
   not exist. A Windows/MSVC build is therefore neither hardened nor as small as a Clang/GCC one.
+- `BUILD_WITH_QJS_SPEED` only means something on top of `BUILD_WITH_OZ`: it exists to undo `-Oz`
+  for one target, and under GCC (which never gets `-Oz`) it re-applies the `-Os` that is already
+  there. It also makes `BUILD_WITH_NO_OUTLINE` redundant rather than additive — see below.
 
 ### Tuned distribution build
 
 `BUILD_WITH_NO_OUTLINE=ON` keeps `-Oz` and LTO but switches off Clang's AArch64 machine outliner,
 which is on by default at `-Oz`. The outliner pulls repeated instruction sequences out of
-QuickJS's interpreter dispatch loop — measured on macOS arm64 that is worth 4% of the binary and
-30% of the run time, which is the worst trade in the whole size ladder.
+QuickJS's interpreter dispatch loop — measured on macOS arm64 that is worth 4.1% of the binary and
+27% of the run time, which is the worst trade in the whole size ladder.
+
+It is the cheaper half of what `--optimization balanced` does. If size is not that tight, prefer
+`balanced`: for another 2.6% it gets the full 41%.
 
 It takes two flags, and the compile-time one alone does nothing under LTO: `-flto=thin` defers
 codegen to the link, long after `-mno-outline` was parsed. The option sets both, probing the
@@ -137,11 +144,15 @@ node scripts/build-dist.mjs --profile min --optimization tuned \
 
 ### Balanced distribution build
 
-Published `balanced-min` binaries use the minimum feature set with `MinSizeRel` (`-Os` on
-GCC/Clang), dead-code stripping, compressed bytecode and the other slim-build levers, but leave
-`BUILD_WITH_OZ` and `BUILD_WITH_LTO` off. This keeps the existing `min` artifact unchanged while
-providing a less aggressive size/speed tradeoff. QuickJS inherits the same top-level codegen
-because it is built from `deps/quickjs` by the parent CMake project.
+Published `balanced-min` binaries are `min` with `BUILD_WITH_QJS_SPEED=ON`: `-Oz` + LTO for the
+binary as a whole, with the `qjs` target — QuickJS, and so ~all JS execution time — raised back to
+`-Os`. Everything else (libuv, libwebsockets, mbedTLS, ada) is cold once the runtime is up and
+stays at `-Oz`. Measured on macOS arm64 that is **+6.7% size for -41% run time**, against +10.8%
+for the whole binary at `-Os`.
+
+`-Os` and `-Oz` are recorded per function in the IR as the `optsize`/`minsize` attributes, so
+unlike `-mno-outline` this survives LTO. It also subsumes `--optimization tuned`: the machine
+outliner only runs on `minsize` functions, and `-Os` does not mark them.
 
 ```bash
 node scripts/build-dist.mjs --profile min --optimization balanced \
