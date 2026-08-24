@@ -12,11 +12,10 @@ on:
       # by nothing that compiles. Skipping CI's 36 jobs for them takes a
       # tooling-only PR from ~25 minutes to ~8.
       #
-      # KNOWN COST: `Lint` and `Codegen` are required status checks and live in
-      # this workflow, so a PR touching *only* ignored paths never reports them
-      # and GitHub shows them as permanently expected. `slim` has
-      # enforce_admins=false, so the owner can still merge; anyone else cannot.
-      # See .claude/plans/2026-08-21_ci-speedup.md.
+      # This workflow's `Lint` and `Codegen` are deliberately NOT the required
+      # status checks -- a required context that never reports leaves a PR
+      # permanently "Expected". The required ones are `lint` and `codegen` in
+      # the fork-owned required.yml, which has no path filter for that reason.
       - '**/*.md'
       - 'mise.toml'
       - 'benchmarks/**'
