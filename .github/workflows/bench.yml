@@ -72,12 +72,9 @@ jobs:
           # the shell builtin cannot report it.
           sudo apt install -y libffi-dev time
 
-      - name: Select clang (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          echo "CC=clang" >> "$GITHUB_ENV"
-          echo "CXX=clang++" >> "$GITHUB_ENV"
-
+      # No CC override: the Linux dist jobs build with the runner's default GCC
+      # (clang was tried in #27 and reverted in #29 for being 3% larger), and a
+      # benchmark of a binary nobody ships is worse than no benchmark.
       - name: Install npm dependencies
         run: npm install --ignore-scripts
 
