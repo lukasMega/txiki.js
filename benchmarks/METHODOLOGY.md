@@ -42,6 +42,8 @@ Hand-written source for the methodology section of the generated `README.md`.
 | id | how built |
 | --- | --- |
 | `full` | `make` — Release, all features, full CLI. The recipe `release.yml` ships as the official asset |
+| `balanced-min` | `node scripts/build-dist.mjs --profile min --optimization balanced` |
+| `tuned-min` | `node scripts/build-dist.mjs --profile min --optimization tuned` |
 | `min` | `node scripts/build-dist.mjs --profile min` — no FFI, no TLS |
 | `ffi` | `--profile ffi` |
 | `tls` | `--profile tls` |

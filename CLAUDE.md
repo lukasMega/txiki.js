@@ -220,6 +220,7 @@ On top of upstream's `BUILD_WITH_STRIP` / `BUILD_WITH_LTO` / `BUILD_WITH_GC_SECT
 BUILD_WITH_OZ=ON make                  # Clang -Oz aggressive size for MinSizeRel (Clang only)
 BUILD_WITH_HIDDEN_VISIBILITY=ON make   # Hide non-exported symbols (-fvisibility=hidden)
 BUILD_WITH_ICF=ON make                 # Fold identical functions at link (lld/gold; not macOS)
+BUILD_WITH_NO_OUTLINE=ON make          # Disable Clang's AArch64 machine outliner (bigger, faster)
 BUILD_WITH_REPRODUCIBLE_PATHS=ON make  # Remap __FILE__/debug paths (no absolute source paths)
 BUILD_WITH_HARDENING=ON make           # Stack protector, zero-init, FORTIFY, arm64 PAC/BTI
 # BUILD_WITH_COMPRESSED_BYTECODE=ON    # Deflate embedded bytecode -- REQUIRES `make js TJSC_COMPRESS=-z`
@@ -238,6 +239,13 @@ needs lld or gold and is skipped on Apple ld64 (which already gets `-Wl,-dead_st
 is experimental — it drops async unwind/`.eh_frame` tables (breaks signal/crash backtraces) while keeping
 C++ exception unwinding; leave it OFF unless you've verified your signal/error paths.
 
+`BUILD_WITH_NO_OUTLINE` is the size/speed dial that matters on arm64, and it is **two** flags, not
+one. Clang's machine outliner is on by default at `-Oz`; it rips repeated sequences out of QuickJS's
+interpreter dispatch loop, which measured here (macOS arm64, `min`) costs 30% of run time to save
+4% of the binary. The compile-time `-mno-outline` alone is a *silent no-op under LTO* — `-flto=thin`
+runs codegen at the link — so the option also adds `-Wl,-mllvm,-enable-machine-outliner=never` to
+`tjs-cli`. Both halves probe first and warn rather than fail on GCC (no outliner) or bfd ld.
+
 ## Testing a slim / dist binary
 
 The published profiles have `tjs test` compiled out, so they cannot drive the suite
@@ -247,7 +255,7 @@ artifact runs every test:
 
 ```bash
 TJS_TEST_EXE=$(pwd)/dist/min/tjs ./build/tjs test tests/   # or: mise run test:dist -- min
-mise run test:dist:all                                     # all six published profiles
+mise run test:dist:all                                     # all eight published profiles
 ```
 
 The skip filter probes `TJS_TEST_EXE` for its own `tjs.engine.features` *and* `tjs.engine.cli`
@@ -395,9 +403,13 @@ is deliberately built and named as a different, non-hardened profile.
 
 Two workflows gate the slim builds, both running the *shipped* binary through the whole suite:
 
-- `.github/workflows/verify.yml` — every push/PR on `slim`, Linux only, 6 profiles. The fast
-  per-merge signal.
-- `.github/workflows/dist.yml` — 6 profiles × 4 platforms; the `release` job `needs: build`, so
+- `.github/workflows/verify.yml` — every push/PR on `slim`, Linux only, the 6 *feature* profiles.
+  The fast per-merge signal. The two alternative-codegen profiles are deliberately not here: on
+  Linux/GCC they differ from `min` only in LTO, so they would cost two jobs to re-test the same
+  binary. `dist.yml` still runs the whole suite on them before anything is published.
+- `.github/workflows/dist.yml` — 8 profiles × 4 platforms (the six feature profiles, plus
+  `tuned-min` and `balanced-min`, which are the `min` feature set at a different codegen
+  mode); the `release` job `needs: build`, so
   a profile whose suite fails is never published.
 
 `dist.yml`'s matrix is fronted by a `gate` job. `on.pull_request` is deliberately unfiltered
