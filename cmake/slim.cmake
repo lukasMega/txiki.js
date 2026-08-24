@@ -28,6 +28,9 @@ xoption(BUILD_WITH_COMPRESSED_BYTECODE "If ON, compress embedded JS bytecode wit
 # --define alone. Pair this with `--define:__TJS_REPL__=false` (slim.mk's
 # RUN_MAIN_DEFINES); each half alone is broken -- see the note in slim.mk.
 xoption(BUILD_WITH_REPL "If ON (default), build the interactive REPL" ON)
+# Keeps WebAssembly but trades WAMR runtime speed and two capabilities for size.
+# Only meaningful when BUILD_WITH_WASM is ON.
+xoption(BUILD_WITH_WASM_FULL "If ON (default), full-featured WAMR (fast interp, SIMD, multi-module)" ON)
 # -Oz does strictly more size work than -Os, but is Clang-only. Rewrite only the
 # *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
 xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
@@ -267,6 +270,34 @@ function(tjs_slim_link_mbedtls)
         target_link_libraries(tjs PUBLIC mbedcrypto)
     endif()
 endfunction()
+
+# Call after upstream's WAMR_* block and before its
+# include(${WAMR_ROOT_DIR}/build-scripts/runtime_lib.cmake).
+#
+# A macro, not a function, and that is load-bearing: upstream sets these as plain
+# directory-scope variables (not cache entries, unlike the LWS_* ones below), and
+# a function body would set them in its own scope where runtime_lib.cmake never
+# sees them. A macro has no scope of its own, so the assignments land where
+# upstream's did. Overriding here rather than editing upstream's block keeps this
+# fork's delta in CMakeLists.txt to the one call line.
+#
+# The classic interpreter is smaller and slower than the fast one, and SIMD is
+# dropped outright. No test exercises SIMD -- the only `v128` in the suite asserts
+# that the JS binding rejects it -- so this needs no tests/feature-skip.json key.
+#
+# WAMR_BUILD_MULTI_MODULE is deliberately NOT turned off here, though it looks
+# like it belongs. Measured: with it off, WebAssembly.Memory.prototype.grow and
+# WebAssembly.Table.prototype.grow fail ("failed to grow memory", and grow()
+# returning -1), failing test-wasm-memory-detach.js and test-wasm-table.js.
+# Growing is core spec behaviour, not an optional capability, so trading it for
+# size is not on the table. Bisected one setting at a time: the classic
+# interpreter alone is fine, multi-module alone reproduces both failures.
+macro(tjs_slim_wasm_options)
+    if(NOT BUILD_WITH_WASM_FULL)
+        set(WAMR_BUILD_FAST_INTERP 0)
+        set(WAMR_BUILD_SIMD 0)
+    endif()
+endmacro()
 
 # Call after upstream's LWS_* block and before add_subdirectory(deps/libwebsockets).
 # These are cache entries set with FORCE, so overriding upstream's values here is

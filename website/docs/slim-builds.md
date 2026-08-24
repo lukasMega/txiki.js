@@ -22,6 +22,7 @@ All of them live in `cmake/slim.cmake`; `CMakeLists.txt` only includes it.
 | `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | ~165 KB        |
 | `BUILD_WITH_MIMALLOC=OFF`   | ON      | Use the system allocator instead of mimalloc | varies         |
 | `BUILD_WITH_REPL=OFF`       | ON      | Remove the interactive REPL                  | ~16.6 KB       |
+| `BUILD_WITH_WASM_FULL=OFF`  | ON      | WAMR classic interpreter, no SIMD            | ~65 KB         |
 
 When TLS is disabled, plain HTTP/WS and TCP/UDP still work, but `https://` / `wss://` requests
 and `TLSSocket`/`TLSServerSocket` throw "TLS not supported in this build"; the Web Crypto API
@@ -56,9 +57,20 @@ The CMake option alone leaves JS calling a binding that no longer exists; the de
 terminal reports that the build has no REPL; piping a program to stdin still works, and so does
 every other entry point.
 
+`BUILD_WITH_WASM_FULL=OFF` keeps WebAssembly but tunes WAMR for size: the classic interpreter
+instead of the fast one, and no SIMD. WebAssembly stays functional — the whole test suite passes
+on such a build — but WASM execution is slower and `v128` is unavailable. It only has an effect
+when `BUILD_WITH_WASM` is on.
+
+It deliberately leaves `WAMR_BUILD_MULTI_MODULE` alone, even though that is another sizeable
+WAMR feature. With multi-module off, `WebAssembly.Memory.prototype.grow()` and
+`WebAssembly.Table.prototype.grow()` stop working — growing throws, or returns `-1` — which is
+core spec behaviour rather than an optional capability.
+
 The active set of feature flags is exposed to JS via `tjs.engine.features`: `wasm`, `sqlite`,
 `tls`, `bundledCa`, `webcrypto` and `ffi`. The REPL reports through `tjs.engine.cli.repl`
-instead, alongside the other CLI gates.
+instead, alongside the other CLI gates. `BUILD_WITH_WASM_FULL` is not reported at runtime: it
+changes how fast WebAssembly runs, not whether `tjs:wasi` and the `WebAssembly` global exist.
 
 Unix/macOS example:
 
