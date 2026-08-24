@@ -182,6 +182,8 @@ BUILD_WITH_WEBCRYPTO=OFF make   # LITE profile only, WinterTC-breaking: drops cr
 BUILD_WITH_FFI=OFF make         # Disable libffi (drops the tjs:ffi module)
 BUILD_WITH_REPL=OFF make        # Drop the interactive REPL. MUST be paired with
                                  # `make js RUN_MAIN_DEFINES="… __TJS_REPL__=false …"`
+BUILD_WITH_WASM_FULL=OFF make   # (WASM builds only) WAMR classic interp + no SIMD:
+                                 # smaller, slower WebAssembly
 
 ```
 
@@ -202,10 +204,23 @@ claimed — that figure was the size of the generated C *source* file, not the a
 
 **Every option this fork adds lives in `cmake/slim.cmake`**, not in `CMakeLists.txt` — upstream
 edits `CMakeLists.txt` constantly, so the fork's delta there is deliberately kept to one
-`include()` plus six `tjs_slim_*()` call sites. CMake is imperative, so the split is not
+`include()` plus seven `tjs_slim_*()` call sites. CMake is imperative, so the split is not
 arbitrary: the option declarations and directory-scoped compile flags run at the `include()`,
 and each `tjs_slim_configure_*` function runs at the one point where its target or dependency
 already exists. Add new fork-only build options there, and call them from the matching function.
+
+`BUILD_WITH_WASM_FULL=OFF` turns off exactly two WAMR settings — `WAMR_BUILD_FAST_INTERP` and
+`WAMR_BUILD_SIMD`. `WAMR_BUILD_MULTI_MODULE` looks like it belongs in that list and is deliberately
+left on: with it off, `WebAssembly.Memory.prototype.grow` and `WebAssembly.Table.prototype.grow`
+fail outright (`failed to grow memory`; `grow()` returns `-1`), taking `test-wasm-memory-detach.js`
+and `test-wasm-table.js` with them. Growing is core spec behaviour, so it is not a size trade to
+make. Bisected one setting at a time — the classic interpreter alone is clean.
+
+One of the seven is a **macro, not a function**, and the difference is load-bearing.
+`tjs_slim_wasm_options()` overrides plain directory-scope `WAMR_*` variables that upstream sets
+just above it; a function body would set them in its own scope, where WAMR's
+`runtime_lib.cmake` would never see them. `tjs_slim_lws_options()` can stay a function only
+because the `LWS_*` values it overrides are cache entries set with `FORCE`.
 
 `tjs_slim_configure_core()` also *removes* `src/cacert.c`, `src/mod_tls.c`, `src/ed25519.c` and
 `src/webcrypto.c` from the `tjs` target when their option is off, so upstream's `add_library(tjs

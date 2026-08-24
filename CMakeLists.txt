@@ -367,6 +367,8 @@ set(WAMR_BUILD_MINI_LOADER 0)
 set(WAMR_DISABLE_HW_BOUND_CHECK 1)
 set(WAMR_DISABLE_STACK_HW_BOUND_CHECK 1)
 
+tjs_slim_wasm_options()
+
 # Include WAMR build scripts
 include(${WAMR_ROOT_DIR}/build-scripts/runtime_lib.cmake)
 
