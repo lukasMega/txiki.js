@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "version": "slim-v26.5.0-1",
+  "commit": "1111111111111111111111111111111111111111",
+  "dirty": false,
+  "date": "2026-06-01T09:00:00.000Z",
+  "platform": "linux-x86_64",
+  "quick": false,
+  "config": {
+    "spawns": 50,
+    "warmups": 10,
+    "reps": 5,
+    "timeTool": "/usr/bin/time (gnu)"
+  },
+  "runner": {
+    "image": "ubuntu24",
+    "ci": true,
+    "cpuModel": "AMD EPYC 7763 64-Core Processor",
+    "cores": 4,
+    "memTotal": 16777216000,
+    "release": "6.8.0-1021-azure"
+  },
+  "toolchain": {
+    "cc": "cc (Ubuntu 13.2.0-23ubuntu4) 13.2.0",
+    "cmake": "cmake version 3.28.3",
+    "node": "v24.0.0"
+  },
+  "binaries": {
+    "full": {
+      "path": "build/tjs",
+      "features": { "wasm": true, "sqlite": true, "tls": true, "bundledCa": true, "webcrypto": true, "ffi": true },
+      "cli": { "eval": true, "serve": true, "bundler": true, "testRunner": true, "compile": true, "app": true,
+               "help": true, "tlsCa": true },
+      "size": { "raw": 6400000, "gzip": 3000000, "text": null, "data": null },
+      "startup": {
+        "noopMedianMs": 8.1,
+        "noopMadMs": 0.2,
+        "noopUnstable": false,
+        "importStdlibMedianMs": 9.4,
+        "importStdlibMadMs": 0.25,
+        "importStdlibUnstable": false,
+        "runs": 50
+      },
+      "memory": { "baselineRssBytes": 12000000, "workloadPeakRssBytes": 41000000 },
+      "cpu": { "userS": 1.2, "sysS": 0.1, "wallS": 1.26, "efficiency": 1.032 },
+      "ops": {
+        "mandelbrot": 350000,
+        "sort": 2000000,
+        "json-parse": 170,
+        "json-stringify": 100,
+        "sha256": 1200,
+        "sha256-mbps": 300,
+        "timers": 1800000,
+        "microtasks": 2900000,
+        "fs-write": 3800
+      },
+      "skipped": []
+    },
+    "min": {
+      "path": "dist/min/tjs",
+      "features": { "wasm": false, "sqlite": false, "tls": false, "bundledCa": false, "webcrypto": true, "ffi": false },
+      "cli": { "eval": false, "serve": false, "bundler": false, "testRunner": false, "compile": true, "app": false,
+               "help": false, "tlsCa": false },
+      "size": { "raw": 2100000, "gzip": 1150000, "text": null, "data": null },
+      "startup": {
+        "noopMedianMs": 10.2,
+        "noopMadMs": 0.3,
+        "noopUnstable": false,
+        "importStdlibMedianMs": 11.0,
+        "importStdlibMadMs": 0.3,
+        "importStdlibUnstable": false,
+        "runs": 50
+      },
+      "memory": { "baselineRssBytes": 9800000, "workloadPeakRssBytes": 26000000 },
+      "cpu": { "userS": 2.0, "sysS": 0.1, "wallS": 2.05, "efficiency": 1.024 },
+      "ops": {
+        "mandelbrot": 168000,
+        "sort": 1100000,
+        "json-parse": 55,
+        "json-stringify": 30,
+        "sha256": 1180,
+        "sha256-mbps": 295,
+        "timers": 1100000,
+        "microtasks": 1300000,
+        "fs-write": 3900
+      },
+      "skipped": []
+    },
+    "ffi-tls": {
+      "path": "dist/ffi-tls/tjs",
+      "features": { "wasm": false, "sqlite": false, "tls": true, "bundledCa": true, "webcrypto": true, "ffi": true },
+      "cli": { "eval": false, "serve": false, "bundler": false, "testRunner": false, "compile": true, "app": false,
+               "help": false, "tlsCa": true },
+      "size": { "raw": 3300000, "gzip": 1700000, "text": null, "data": null },
+      "startup": {
+        "noopMedianMs": 10.4,
+        "noopMadMs": 0.3,
+        "noopUnstable": false,
+        "importStdlibMedianMs": 11.2,
+        "importStdlibMadMs": 0.3,
+        "importStdlibUnstable": false,
+        "runs": 50
+      },
+      "memory": { "baselineRssBytes": 10100000, "workloadPeakRssBytes": 27000000 },
+      "cpu": { "userS": 2.05, "sysS": 0.1, "wallS": 2.1, "efficiency": 1.024 },
+      "ops": {
+        "mandelbrot": 167000,
+        "sort": 1090000,
+        "json-parse": 54,
+        "json-stringify": 29,
+        "sha256": 1175,
+        "sha256-mbps": 294,
+        "timers": 1090000,
+        "microtasks": 1290000,
+        "fs-write": 3880
+      },
+      "skipped": []
+    }
+  }
+}

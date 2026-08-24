@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 99,
+  "version": "slim-v26.6.0-2",
+  "commit": "2222222222222222222222222222222222222222",
+  "dirty": true,
+  "date": "2026-07-15T10:30:00.000Z",
+  "platform": "macos-arm64",
+  "binaries": {
+    "full": {
+      "path": "build/tjs",
+      "features": { "wasm": true, "sqlite": true, "tls": true, "bundledCa": true, "webcrypto": true, "ffi": true },
+      "size": { "raw": 6092848, "gzip": 2917898 },
+      "startup": { "noopMedianMs": 7.92, "noopMadMs": 0.29, "runs": 50 },
+      "ops": { "mandelbrot": 537552, "timers": 1901292, "sha256-mbps": 313.3, "wasm-fib": 4200 }
+    },
+    "tuned-min": {
+      "path": "dist/tuned-min/tjs",
+      "features": { "wasm": false, "sqlite": false, "tls": false, "bundledCa": false, "webcrypto": true,
+                    "ffi": false },
+      "size": { "raw": 2010112, "gzip": 1102400 },
+      "startup": { "noopMedianMs": 9.15, "noopMadMs": 0.31, "runs": 50 },
+      "ops": { "mandelbrot": 470000, "timers": 1750000, "sha256-mbps": 305.1 }
+    }
+  }
+}
