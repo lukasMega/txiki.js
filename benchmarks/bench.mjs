@@ -55,7 +55,7 @@ if (values.help || values.binary.length === 0) {
     console.log(`Usage: node benchmarks/bench.mjs --binary <id>=<path> [--binary ...] [options]
 
   --binary <id>=<path>  A binary to measure. Repeatable. Conventional ids:
-                        full, min, ffi, tls, ffi-tls.
+                        full, balanced-min, tuned-min, min, ffi, tls, ffi-tls.
   --out <path>          Result JSON destination (default: benchmarks/history/<platform>/<version>.json)
   --spawns <n>          Measured startup spawns per workload (default 50)
   --warmups <n>         Warmup spawns, discarded (default 10)

@@ -4,8 +4,9 @@ name: Dist (slim binaries)
 # published (`release` needs: build). The size gate is tag-only so a legitimate
 # growth lands in a PR job summary instead of blocking it.
 #
-# A profile added here costs four jobs, which is why SQLite ships as two
-# profiles (the floor and the widest) rather than doubling the existing four.
+# A profile added here costs four jobs. The two alternative codegen modes
+# therefore ship only with the minimum feature set instead of doubling all six
+# smallest profiles.
 
 on:
   workflow_dispatch:
@@ -29,6 +30,8 @@ on:
       # too and simply name the profile someone cares about.
       - "slim-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-min-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-balanced-min-v[0-9]+.[0-9]+.[0-9]+*"
+      - "slim-tuned-min-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-ffi-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-tls-v[0-9]+.[0-9]+.[0-9]+*"
       - "slim-sqlite-v[0-9]+.[0-9]+.[0-9]+*"
@@ -47,7 +50,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decides whether a pull_request event deserves the 24-job matrix. Two ways in:
+  # Decides whether a pull_request event deserves the 32-job matrix. Two ways in:
   # the PR touches something that changes what gets built, or it carries the
   # `auto-release` label -- the upstream-release proposal, which must have the
   # full four-platform signal before it lands on `slim`, not verify.yml's
@@ -82,13 +85,13 @@ jobs:
 
           # `gh pr diff --name-only` would need a checkout; the API does not.
           gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > changed.txt
-          if grep -qxE 'scripts/build-dist\.mjs|\.github/workflows/dist\.yml|CMakeLists\.txt' changed.txt; then
+          if grep -qxE 'scripts/build-dist\.mjs|\.github/workflows/dist\.yml|CMakeLists\.txt|cmake/slim\.cmake' changed.txt; then
             decide true
           fi
           decide false
 
   build:
-    name: ${{ matrix.profile }} ${{ matrix.target.name }}
+    name: ${{ matrix.optimization == 'smallest' && matrix.profile || format('{0}-{1}', matrix.optimization, matrix.profile) }} ${{ matrix.target.name }}
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ${{ matrix.target.os }}
@@ -99,6 +102,18 @@ jobs:
       # matrix is merged into every combination instead of multiplying out.
       matrix:
         profile: [ min, ffi, tls, ffi-tls, sqlite, ffi-tls-sqlite ]
+        optimization: [ smallest, balanced, tuned ]
+        exclude:
+          - { profile: ffi, optimization: balanced }
+          - { profile: tls, optimization: balanced }
+          - { profile: ffi-tls, optimization: balanced }
+          - { profile: sqlite, optimization: balanced }
+          - { profile: ffi-tls-sqlite, optimization: balanced }
+          - { profile: ffi, optimization: tuned }
+          - { profile: tls, optimization: tuned }
+          - { profile: ffi-tls, optimization: tuned }
+          - { profile: sqlite, optimization: tuned }
+          - { profile: ffi-tls-sqlite, optimization: tuned }
         target:
           - { name: linux-x86_64, os: ubuntu-latest }
           - { name: linux-arm64, os: ubuntu-24.04-arm }
@@ -160,6 +175,7 @@ jobs:
         if: runner.os != 'Windows'
         run: >-
           mise run dist -- --profile ${{ matrix.profile }} --out dist --host-tjs
+          --optimization ${{ matrix.optimization }}
           ${{ startsWith(github.ref, 'refs/tags/') && '--enforce-size' || '' }}
 
       - name: Build (Windows)
@@ -167,6 +183,7 @@ jobs:
         # unless it is written with `=`, so these cannot be split into two words.
         run: >
           node scripts/build-dist.mjs --profile ${{ matrix.profile }} --out dist --host-tjs
+          --optimization ${{ matrix.optimization }}
           ${{ startsWith(github.ref, 'refs/tags/') && '--enforce-size' || '' }}
           "--cmake-arg=-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
           "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
@@ -202,7 +219,7 @@ jobs:
           fi
 
           {
-            echo "### ${{ matrix.profile }} ${{ matrix.target.name }}"
+            echo "### ${{ matrix.optimization == 'smallest' && matrix.profile || format('{0}-{1}', matrix.optimization, matrix.profile) }} ${{ matrix.target.name }}"
             echo
             echo "| OK | SKIP | FAIL | TIMEOUT |"
             echo "| ---: | ---: | ---: | ---: |"
@@ -215,7 +232,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: txiki-slim-${{ matrix.profile }}-${{ matrix.target.name }}
+          name: txiki-slim-${{ matrix.optimization == 'smallest' && matrix.profile || format('{0}-{1}', matrix.optimization, matrix.profile) }}-${{ matrix.target.name }}
           path: dist
 
   # Every profile lands on one Release as txiki-slim-<profile>-<platform>.zip.
@@ -251,22 +268,30 @@ jobs:
       - name: Release notes
         run: |
           {
-            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`), six feature"
-            echo "profiles x four platforms."
+            echo "Slim txiki.js builds (\`scripts/build-dist.mjs\`), eight profiles"
+            echo "x four platforms."
             echo
-            echo "| profile | FFI (\`tjs:ffi\`) | TLS (HTTPS/WSS/TLSSocket) | SQLite (\`tjs:sqlite\`) |"
-            echo "| --- | --- | --- | --- |"
-            echo "| \`min\`            | no  | no               | no  |"
-            echo "| \`ffi\`            | yes | no               | no  |"
-            echo "| \`tls\`            | no  | yes (bundled CA) | no  |"
-            echo "| \`sqlite\`         | no  | no               | yes |"
-            echo "| \`ffi-tls\`        | yes | yes (bundled CA) | no  |"
-            echo "| \`ffi-tls-sqlite\` | yes | yes (bundled CA) | yes |"
+            echo "| profile | codegen | FFI (\`tjs:ffi\`) | TLS (HTTPS/WSS/TLSSocket) | SQLite (\`tjs:sqlite\`) |"
+            echo "| --- | --- | --- | --- | --- |"
+            echo "| \`balanced-min\`   | \`-Os\`, no LTO       | no  | no               | no  |"
+            echo "| \`tuned-min\`      | \`-Oz\` + LTO, no outliner | no  | no          | no  |"
+            echo "| \`min\`            | \`-Oz\` + LTO        | no  | no               | no  |"
+            echo "| \`ffi\`            | \`-Oz\` + LTO        | yes | no               | no  |"
+            echo "| \`tls\`            | \`-Oz\` + LTO        | no  | yes (bundled CA) | no  |"
+            echo "| \`sqlite\`         | \`-Oz\` + LTO        | no  | no               | yes |"
+            echo "| \`ffi-tls\`        | \`-Oz\` + LTO        | yes | yes (bundled CA) | no  |"
+            echo "| \`ffi-tls-sqlite\` | \`-Oz\` + LTO        | yes | yes (bundled CA) | yes |"
+            echo
+            echo "The codegen column describes what is *requested*. \`-Oz\` and the"
+            echo "AArch64 machine outliner are Clang-only, so the Linux (GCC) and"
+            echo "Windows (MSVC) artifacts fall back to \`-Os\`/\`/O1\` and the three"
+            echo "\`min\` variants differ there only in LTO. On macOS all three are"
+            echo "distinct; see BUILDINFO.txt per artifact."
             echo
             echo "\`localStorage\` is persistent only on the SQLite profiles; the"
             echo "others fall back to an in-memory store."
             echo
-            echo "All of them: MinSizeRel, compressed bytecode, hardened (except MSVC,"
+            echo "All profiles use MinSizeRel, compressed bytecode, hardened (except MSVC,"
             echo "which compiles those levers out), no WebAssembly, no"
             echo "mimalloc, and no \`eval\`/\`serve\`/\`test\`/\`bundle\`/\`app\`"
             echo "subcommands. Always present: WebCrypto, \`run\`, the REPL, \`compile\`."

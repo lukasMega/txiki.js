@@ -32,6 +32,16 @@ xoption(BUILD_WITH_REPRODUCIBLE_PATHS "If ON, remap __FILE__/debug paths to stri
 xoption(BUILD_WITH_HARDENING "If ON, enable exploit-mitigation flags (stack protector, zero-init, arm64 PAC/BTI, FORTIFY)" OFF)
 xoption(BUILD_WITH_NO_UNWIND_TABLES "EXPERIMENTAL: drop async unwind/.eh_frame tables" OFF)
 xoption(BUILD_WITH_ICF "If ON, fold identical functions at link (lld/gold, ELF only)" OFF)
+# Clang's AArch64 machine outliner is on by default at -Oz. It pulls repeated
+# instruction sequences out of QuickJS's interpreter dispatch loop, which is the
+# single worst place to trade calls for code: measured here (macOS arm64, `min`
+# feature set) it buys 4% of binary size for 30% of run time.
+#
+# Disabling it takes TWO flags, and the compile-time one alone is a silent
+# no-op: with -flto=thin the codegen backend runs at link, long after
+# -mno-outline was parsed. Measured, that mistake costs +16 KB and changes the
+# run time by nothing. The linker -mllvm below is the flag that actually does it.
+xoption(BUILD_WITH_NO_OUTLINE "If ON, disable Clang's AArch64 machine outliner (compile + LTO link flag)" OFF)
 
 ###
 ### Directory-scoped compile flags.
@@ -47,6 +57,17 @@ if(BUILD_WITH_OZ)
         message(STATUS "Using -Oz for MinSizeRel")
     else()
         message(WARNING "BUILD_WITH_OZ requested but compiler is not Clang; keeping -Os")
+    endif()
+endif()
+
+# Half of BUILD_WITH_NO_OUTLINE; the other half is the link flag in
+# tjs_slim_configure_cli(). GCC has no machine outliner and rejects the flag, so
+# probe rather than assume Clang.
+if(BUILD_WITH_NO_OUTLINE AND NOT MSVC)
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag(-mno-outline TJS_HAVE_MNO_OUTLINE)
+    if(TJS_HAVE_MNO_OUTLINE)
+        add_compile_options(-mno-outline)
     endif()
 endif()
 
@@ -148,15 +169,12 @@ function(tjs_slim_configure_core)
     endif()
 endfunction()
 
-# Call after the tjs-cli target exists and after upstream's BUILD_WITH_GC_SECTIONS
-# link block.
-#
 # Identical-code folding needs lld or gold; classic GNU bfd ld and Apple ld64 have
 # no --icf, and MSVC already folds via /OPT:ICF in the GC_SECTIONS block, so this
 # targets the ELF linkers only. --icf=safe folds only functions the compiler
 # marked address-insignificant (Clang emits these by default), so function-pointer
 # identity is preserved; --icf=all saves more but is unsafe.
-function(tjs_slim_configure_cli)
+function(_tjs_slim_configure_icf)
     if(NOT BUILD_WITH_ICF OR APPLE OR MSVC)
         return()
     endif()
@@ -174,6 +192,35 @@ function(tjs_slim_configure_cli)
     else()
         message(WARNING "BUILD_WITH_ICF requested but the linker has no --icf (needs lld or gold); skipping")
     endif()
+endfunction()
+
+# The half of BUILD_WITH_NO_OUTLINE that actually disables outlining: with LTO on,
+# codegen happens here, at the link, not at the -mno-outline compile step.
+# ld64 and lld forward -mllvm to the LTO backend; GNU bfd ld has no such option
+# and rejects it, which is what the probe is for.
+function(_tjs_slim_configure_no_outline)
+    if(NOT BUILD_WITH_NO_OUTLINE OR MSVC)
+        return()
+    endif()
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
+        include(CheckLinkerFlag)
+        check_linker_flag(C "-Wl,-mllvm,-enable-machine-outliner=never" TJS_HAVE_NO_OUTLINE_LINK)
+    else()
+        set(TJS_HAVE_NO_OUTLINE_LINK FALSE)
+    endif()
+    if(TJS_HAVE_NO_OUTLINE_LINK)
+        target_link_options(tjs-cli PRIVATE -Wl,-mllvm,-enable-machine-outliner=never)
+    else()
+        message(WARNING "BUILD_WITH_NO_OUTLINE requested but the linker does not forward -mllvm "
+                        "(needs ld64 or lld); the compile-time -mno-outline alone does nothing under LTO")
+    endif()
+endfunction()
+
+# Call after the tjs-cli target exists and after upstream's BUILD_WITH_GC_SECTIONS
+# link block.
+function(tjs_slim_configure_cli)
+    _tjs_slim_configure_icf()
+    _tjs_slim_configure_no_outline()
 endfunction()
 
 # Call after add_subdirectory(deps/ada).

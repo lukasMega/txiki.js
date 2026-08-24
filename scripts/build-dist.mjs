@@ -9,6 +9,8 @@
 //
 //   node scripts/build-dist.mjs                 # build the current checkout
 //   node scripts/build-dist.mjs --profile tls   # pick a feature set
+//   node scripts/build-dist.mjs --profile min --optimization balanced
+//   node scripts/build-dist.mjs --profile min --optimization tuned
 //   node scripts/build-dist.mjs --bundles-only  # regenerate src/bundles only
 //   node scripts/build-dist.mjs --ref v26.6.0   # clone the fork at a ref first
 //
@@ -48,6 +50,13 @@ const PROFILES = {
     'ffi-tls-sqlite': { ffi: true, tls: true, sqlite: true },
 };
 
+// Codegen modes, largest-and-fastest last. `tuned` is `smallest` with Clang's
+// AArch64 machine outliner switched off: measured on darwin-arm64 it gives back
+// 70% of `balanced`'s speed for 38% of its size cost. -Oz and the outliner are
+// both Clang-only, so on the GCC and MSVC runners all three modes collapse
+// towards -Os/O1 and only the LTO difference survives.
+const OPTIMIZATIONS = [ 'smallest', 'tuned', 'balanced' ];
+
 // CLI subcommand gating, applied to the run-main bundle via esbuild --define.
 // esbuild's dead-code elimination then drops the gated-out subcommands.
 function slimDefines(features) {
@@ -78,8 +87,9 @@ const ESBUILD_COMMON = [
 ];
 const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 
-// Real sizes, measured per platform AND per profile from the green dist.yml run
-// on 2026-08-20 at v26.6.0 (24 cells, all suites passing).
+// Smallest-profile sizes, measured per platform from the green dist.yml run on
+// 2026-08-20 at v26.6.0 (24 cells, all suites passing). The balanced-min and
+// tuned-min measurements are added after their first four-platform CI run.
 //
 // A single number per profile does not survive contact with four platforms: the
 // spread across them is larger than the spread across profiles. linux-arm64 is
@@ -241,6 +251,7 @@ function fmtBytes(n) {
 const { values: opts } = parseArgs({
     options: {
         profile: { type: 'string', default: 'ffi' },
+        optimization: { type: 'string', default: 'smallest' },
         ref: { type: 'string' },
         repo: { type: 'string', default: 'https://github.com/lukasMega/txiki.js-with-slim-builds.git' },
         workdir: { type: 'string' },
@@ -265,6 +276,11 @@ if (opts.help) {
 
   --profile <name>      Feature set to build: ${Object.keys(PROFILES).join(', ')}
                         (default: ffi). They differ only in FFI, TLS and SQLite.
+  --optimization <name> Code-size mode: ${OPTIMIZATIONS.join(', ')}
+                        (default: smallest). Smallest keeps -Oz plus LTO where
+                        supported; tuned is smallest with Clang's AArch64
+                        machine outliner disabled (~+4% size, ~-30% run time);
+                        balanced uses -Os without LTO.
   --ref <git-ref>       Clone --repo at this ref into --workdir and build that
                         instead of the current checkout.
   --repo <url>          Repository to clone (default: our fork).
@@ -301,6 +317,11 @@ const features = PROFILES[opts.profile];
 if (!features) {
     fail(`unknown --profile ${JSON.stringify(opts.profile)}; `
         + `expected one of: ${Object.keys(PROFILES).join(', ')}`);
+}
+
+if (!OPTIMIZATIONS.includes(opts.optimization)) {
+    fail(`unknown --optimization ${JSON.stringify(opts.optimization)}; `
+        + `expected one of: ${OPTIMIZATIONS.join(', ')}`);
 }
 
 const nodeMajor = Number(process.versions.node.split('.')[0]);
@@ -644,9 +665,14 @@ function detectMsvc() {
 }
 
 const msvc = detectMsvc();
+const balanced = opts.optimization === 'balanced';
+const tuned = opts.optimization === 'tuned';
+const artifactProfile = opts.optimization === 'smallest'
+    ? opts.profile
+    : `${opts.optimization}-${opts.profile}`;
 // MSVC compiles the hardening lever out, so its artifacts must not claim to be
 // hardened even though they are configured identically otherwise.
-const profile = `smallest-compressed-${opts.profile}${msvc ? '' : '-hardened'}`;
+const profile = `${opts.optimization}-compressed-${opts.profile}${msvc ? '' : '-hardened'}`;
 
 function buildTjs() {
     const dir = path.resolve(root, opts['build-dir']);
@@ -660,7 +686,7 @@ function buildTjs() {
         `-DBUILD_WITH_TLS=${features.tls ? 'ON' : 'OFF'}`,
         `-DBUILD_WITH_FFI=${features.ffi ? 'ON' : 'OFF'}`,
         '-DBUILD_WITH_MIMALLOC=OFF',
-        '-DBUILD_WITH_LTO=ON',
+        `-DBUILD_WITH_LTO=${balanced ? 'OFF' : 'ON'}`,
         '-DBUILD_WITH_GC_SECTIONS=ON',
         '-DBUILD_WITH_COMPRESSED_BYTECODE=ON',
     ];
@@ -679,7 +705,8 @@ function buildTjs() {
         // REPRODUCIBLE_PATHS/ICF/HARDENING are all `NOT MSVC`-guarded in
         // CMakeLists.txt. Passing them would be accepted and do nothing.
         flags.push(
-            '-DBUILD_WITH_OZ=ON',
+            `-DBUILD_WITH_OZ=${balanced ? 'OFF' : 'ON'}`,
+            `-DBUILD_WITH_NO_OUTLINE=${tuned ? 'ON' : 'OFF'}`,
             '-DBUILD_WITH_HIDDEN_VISIBILITY=ON',
             '-DBUILD_WITH_ICF=ON',
             '-DBUILD_WITH_STRIP=ON',
@@ -906,13 +933,23 @@ function sizeBudget() {
         return { budget: explicit, measured: null, basis: '--max-size' };
     }
 
-    const measured = MEASURED[platformKey]?.[opts.profile];
+    const measured = MEASURED[platformKey]?.[artifactProfile];
 
     if (measured) {
         return {
             budget: Math.round(measured * SIZE_HEADROOM),
             measured,
             basis: `measured +${Math.round((SIZE_HEADROOM - 1) * 100)}%`,
+        };
+    }
+
+    const smallestBaseline = MEASURED[platformKey]?.[opts.profile];
+
+    if (opts.optimization !== 'smallest' && smallestBaseline) {
+        return {
+            budget: Math.round(smallestBaseline * 1.25),
+            measured: null,
+            basis: 'temporary smallest baseline +25%',
         };
     }
 
@@ -928,13 +965,13 @@ function checkSize(bin) {
     const { budget, measured, basis } = sizeBudget();
 
     log(`size:      ${fmtBytes(size)}  (budget ${fmtBytes(budget)}, ${platformKey}, `
-        + `${opts.profile}, ${basis})`);
+        + `${artifactProfile}, ${basis})`);
 
     if (measured !== null && size !== measured) {
         const delta = size - measured;
 
         log(`note:      ${delta > 0 ? '+' : ''}${delta} B vs the recorded ${platformKey} `
-            + `${opts.profile} baseline (${measured} B)`);
+            + `${artifactProfile} baseline (${measured} B)`);
     }
 
     const expect = Number(opts['expect-size']);
@@ -983,6 +1020,7 @@ function packageArtifact(bin, size) {
     fs.writeFileSync(path.join(outDir, 'BUILDINFO.txt'),
         [
             `profile:  ${profile}`,
+            `optimization: ${opts.optimization}`,
             `features: ffi=${features.ffi} tls=${features.tls} `
                 + `sqlite=${features.sqlite} wasm=false webcrypto=true`,
             `platform: ${platformKey}`,

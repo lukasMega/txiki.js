@@ -16,7 +16,9 @@ node = "24"
 #   build:smallest-slim                     1,978,064  1.89  no   no   yes            no
 #   build:smallest                          1,994,576  1.90  no   no   yes            no
 #   dist:ffi                                2,026,944  1.93  yes  no   yes            yes
+#   dist:tuned-min                          2,057,888  1.96  no   no   yes            yes
 #   build:smallest-tls                      2,161,808  2.06  no   yes  yes            no
+#   dist:balanced-min                       2,189,136  2.09  no   no   yes            yes
 #   dist:tls                                2,456,752  2.34  no   yes  yes            yes
 #   dist:ffi-tls                            2,507,584  2.39  yes  yes  yes            yes
 #   dist:sqlite                             2,906,224  2.77  no   no   yes            yes
@@ -30,6 +32,12 @@ node = "24"
 # the two `*sqlite` profiles. The `dist:*`
 # tasks add BUILD_WITH_HARDENING (+~245 KB of PAC/BTI prologues and stack
 # protectors) and are what CI publishes; they also smoke-test the result.
+#
+# Two exceptions to the codegen half of that: `dist:tuned-min` keeps -Oz + LTO
+# but disables Clang's AArch64 machine outliner (+82 KB, ~30% faster), and
+# `dist:balanced-min` drops to -Os with no LTO (+213 KB, ~41% faster). Both
+# measured against dist:min on this machine with a fib/property/sort/string/Map
+# workload; the outliner is the whole story behind -Oz's interpreter slowdown.
 #
 # Two shared gotchas, not repeated per task below:
 #   * bundles are regenerated through the DEFAULT build/ toolchain, because
@@ -208,6 +216,14 @@ ls -lh build-smallest-compressed-ffi/tjs
 description = "Published profile: no FFI, no TLS (1.88 MiB)"
 run = "node scripts/build-dist.mjs --profile min --build-dir build-dist-min --out dist/min"
 
+[tasks."dist:balanced-min"]
+description = "Published balanced profile: -Os, no LTO, no FFI, no TLS (2.09 MiB)"
+run = "node scripts/build-dist.mjs --profile min --optimization balanced --build-dir build-dist-balanced-min --out dist/balanced-min"
+
+[tasks."dist:tuned-min"]
+description = "Published tuned profile: -Oz + LTO with the machine outliner off, no FFI, no TLS (1.96 MiB)"
+run = "node scripts/build-dist.mjs --profile min --optimization tuned --build-dir build-dist-tuned-min --out dist/tuned-min"
+
 [tasks."build:smallest-slim"]
 description = "Smallest binary + slim CLI, uncompressed bytecode (1.89 MiB)"
 run = """
@@ -343,7 +359,7 @@ run = "node scripts/build-dist.mjs"
 
 [tasks."dist:all"]
 description = "Build every published profile"
-depends = ["dist:min", "dist:ffi", "dist:tls", "dist:ffi-tls", "dist:sqlite", "dist:ffi-tls-sqlite"]
+depends = ["dist:balanced-min", "dist:tuned-min", "dist:min", "dist:ffi", "dist:tls", "dist:ffi-tls", "dist:sqlite", "dist:ffi-tls-sqlite"]
 run = "ls -lh dist/*/tjs"
 
 # The dist profiles have `tjs test` compiled out, so they cannot drive the suite
@@ -400,7 +416,7 @@ git status --porcelain --untracked-files=no
 description = "Run the full suite against every published profile"
 run = """
 set -eu
-for p in min ffi tls ffi-tls sqlite ffi-tls-sqlite; do
+for p in balanced-min tuned-min min ffi tls ffi-tls sqlite ffi-tls-sqlite; do
   echo "==> $p"
   TJS_TEST_EXE="$(pwd)/dist/$p/tjs" ./build/tjs test tests/
 done
