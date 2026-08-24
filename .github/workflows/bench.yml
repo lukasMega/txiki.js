@@ -54,6 +54,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # History entries are keyed by `git describe --tags`, and at the
+          # default depth of 1 there are no tags to describe against -- the
+          # version silently falls back to a bare sha and the per-release trend
+          # tables have nothing to group by.
+          fetch-depth: 0
 
       - uses: jdx/mise-action@v3
         with:
