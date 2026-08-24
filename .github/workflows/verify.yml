@@ -10,19 +10,22 @@ name: Verify (slim profiles)
 # the other platforms before anything is published. Keep the two matrices in
 # step: a profile verified here but not built there would ship untested.
 
+# The pull_request trigger is deliberately unfiltered, on BOTH axes. These six
+# job names are required status checks, and GitHub reports no check at all for a
+# workflow an event filter skipped -- which leaves the PR permanently "Expected"
+# and unmergeable. Two filters used to be here and both hit it:
+#
+#   paths-ignore: website/**, types/**, **/*.md   -> a docs-only PR was stuck
+#   branches: [ slim ]                            -> a stacked PR was stuck,
+#       because a PR based on another feature branch is not a PR "to slim"
+#
+# Do not re-add either without first moving these contexts out of the required
+# set. The push trigger keeps its branch filter: pushes to a feature branch are
+# already covered by that branch's PR.
 on:
   push:
     branches: [ slim ]
-    paths-ignore:
-      - 'website/**'
-      - 'types/**'
-      - '**/*.md'
   pull_request:
-    branches: [ slim ]
-    paths-ignore:
-      - 'website/**'
-      - 'types/**'
-      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
