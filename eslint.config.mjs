@@ -30,6 +30,7 @@ export default [
             sourceType: 'module',
             globals: {
                 ...globals.browser,
+                __TJS_REPL__: 'readonly',
                 __TJS_EVAL__: 'readonly',
                 __TJS_SERVE__: 'readonly',
                 __TJS_BUNDLER__: 'readonly',
