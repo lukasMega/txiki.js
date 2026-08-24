@@ -51,6 +51,13 @@ xoption(BUILD_WITH_ICF "If ON, fold identical functions at link (lld/gold, ELF o
 # -mno-outline was parsed. Measured, that mistake costs +16 KB and changes the
 # run time by nothing. The linker -mllvm below is the flag that actually does it.
 xoption(BUILD_WITH_NO_OUTLINE "If ON, disable Clang's AArch64 machine outliner (compile + LTO link flag)" OFF)
+# Size and speed are not spread evenly across this binary. deps/quickjs is where
+# essentially all JS execution time goes, while libuv/lws/mbedtls/sqlite3/WAMR/ada
+# are cold once the runtime is up. A single directory-wide -Oz therefore pays the
+# -Oz slowdown on the one target that cannot afford it, to save size on targets
+# that would never have been hot anyway. This raises just the `qjs` target back to
+# -Os and leaves everything else at -Oz.
+xoption(BUILD_WITH_QJS_SPEED "If ON, compile deps/quickjs at -Os while the rest of the binary stays at -Oz" OFF)
 
 ###
 ### Directory-scoped compile flags.
@@ -235,6 +242,32 @@ endfunction()
 function(tjs_slim_configure_cli)
     _tjs_slim_configure_icf()
     _tjs_slim_configure_no_outline()
+endfunction()
+
+# Call after add_subdirectory(deps/quickjs).
+#
+# Appending to the target's COMPILE_OPTIONS puts -Os after the -Oz that
+# CMAKE_C_FLAGS_MINSIZEREL contributes, and the last -O on a Clang/GCC command
+# line wins -- so this overrides the directory-wide level for this target only,
+# without touching upstream's flag strings.
+#
+# It survives LTO, unlike BUILD_WITH_NO_OUTLINE's compile half: -Os/-Oz are
+# recorded per function in the IR as the `optsize`/`minsize` attributes, which the
+# LTO backend reads at link time. That is also why this implies "no outliner for
+# QuickJS": Clang's AArch64 machine outliner runs on `minsize` functions, and -Os
+# does not mark them.
+function(tjs_slim_configure_quickjs)
+    if(NOT BUILD_WITH_QJS_SPEED)
+        return()
+    endif()
+    if(MSVC)
+        # The -Oz this exists to undo is Clang-only (BUILD_WITH_OZ warns and keeps
+        # -Os under GCC, and never reaches MSVC at all), so there is nothing to
+        # raise back here.
+        message(WARNING "BUILD_WITH_QJS_SPEED requested but MSVC has no -Oz to override; skipping")
+        return()
+    endif()
+    target_compile_options(qjs PRIVATE -Os)
 endfunction()
 
 # Call after add_subdirectory(deps/ada).

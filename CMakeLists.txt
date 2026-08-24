@@ -240,6 +240,7 @@ add_executable(tjsc EXCLUDE_FROM_ALL
 ###
 
 add_subdirectory(deps/quickjs EXCLUDE_FROM_ALL)
+tjs_slim_configure_quickjs()
 target_link_libraries(tjs PUBLIC qjs)
 target_link_libraries(tjsc qjs)
 

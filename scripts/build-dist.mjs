@@ -50,11 +50,22 @@ const PROFILES = {
     'ffi-tls-sqlite': { ffi: true, tls: true, sqlite: true },
 };
 
-// Codegen modes, largest-and-fastest last. `tuned` is `smallest` with Clang's
-// AArch64 machine outliner switched off: measured on darwin-arm64 it gives back
-// 70% of `balanced`'s speed for 38% of its size cost. -Oz and the outliner are
-// both Clang-only, so on the GCC and MSVC runners all three modes collapse
-// towards -Os/O1 and only the LTO difference survives.
+// Codegen modes, largest-and-fastest last. All three start from MinSizeRel; they
+// differ in how much of the -Oz slowdown they buy back, and where.
+//
+//   smallest  -Oz + LTO everywhere.
+//   tuned     smallest with Clang's AArch64 machine outliner switched off.
+//   balanced  smallest with deps/quickjs raised back to -Os (BUILD_WITH_QJS_SPEED).
+//
+// Measured on darwin-arm64, `min`, against smallest: tuned is +4.1% size for -27%
+// run time, balanced +6.7% for -41%. `balanced` implies tuned's win rather than
+// stacking with it -- the outliner only runs on functions marked `minsize`, which
+// -Os does not set, so raising QuickJS to -Os already takes the interpreter out of
+// its reach. Setting both measured 32,688 B larger than balanced alone at
+// identical run time, which is why BUILD_WITH_NO_OUTLINE is not part of it.
+//
+// -Oz and the outliner are both Clang-only, so on the GCC and MSVC runners all
+// three modes collapse onto -Os/O1 + LTO and produce the same binary.
 const OPTIMIZATIONS = [ 'smallest', 'tuned', 'balanced' ];
 
 // The REPL has two halves that must agree -- the run-main bundle define and the
@@ -104,6 +115,14 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // tuned-min matching min exactly on linux-x64, linux-arm64 and win32-x64 is not
 // a copy-paste error: -Oz and the machine outliner are Clang-only, and those
 // three legs build with GCC or MSVC, so "min with the outliner off" is min.
+//
+// The four balanced-min numbers predate the recipe change from "-Os, no LTO" to
+// "-Oz + LTO with QuickJS at -Os" and are therefore too HIGH on every platform:
+// on darwin-arm64 by ~80 KB, and on the GCC/MSVC legs by the whole LTO delta,
+// since balanced now produces the same binary as min there. Deliberately left
+// alone rather than guessed at: the gate only trips on a binary that is *over*
+// its budget, so a stale-high baseline is slack, never a false failure, and these
+// are refreshed from the release artifacts after the next green dist.yml run.
 //
 // A single number per profile does not survive contact with four platforms: the
 // spread across them is larger than the spread across profiles. linux-arm64 is
@@ -297,8 +316,9 @@ if (opts.help) {
   --optimization <name> Code-size mode: ${OPTIMIZATIONS.join(', ')}
                         (default: smallest). Smallest keeps -Oz plus LTO where
                         supported; tuned is smallest with Clang's AArch64
-                        machine outliner disabled (~+4% size, ~-30% run time);
-                        balanced uses -Os without LTO.
+                        machine outliner disabled (~+4% size, ~-27% run time);
+                        balanced is smallest with deps/quickjs raised to -Os
+                        (~+7% size, ~-41% run time).
   --ref <git-ref>       Clone --repo at this ref into --workdir and build that
                         instead of the current checkout.
   --repo <url>          Repository to clone (default: our fork).
@@ -705,7 +725,7 @@ function buildTjs() {
         `-DBUILD_WITH_FFI=${features.ffi ? 'ON' : 'OFF'}`,
         '-DBUILD_WITH_MIMALLOC=OFF',
         `-DBUILD_WITH_REPL=${REPL ? 'ON' : 'OFF'}`,
-        `-DBUILD_WITH_LTO=${balanced ? 'OFF' : 'ON'}`,
+        '-DBUILD_WITH_LTO=ON',
         '-DBUILD_WITH_GC_SECTIONS=ON',
         '-DBUILD_WITH_COMPRESSED_BYTECODE=ON',
     ];
@@ -720,12 +740,13 @@ function buildTjs() {
     }
 
     if (!msvc) {
-        // BUILD_WITH_OZ/HIDDEN_VISIBILITY/STRIP/NO_UNWIND_TABLES/
-        // REPRODUCIBLE_PATHS/ICF/HARDENING are all `NOT MSVC`-guarded in
-        // CMakeLists.txt. Passing them would be accepted and do nothing.
+        // BUILD_WITH_OZ/NO_OUTLINE/QJS_SPEED/HIDDEN_VISIBILITY/STRIP/
+        // NO_UNWIND_TABLES/REPRODUCIBLE_PATHS/ICF/HARDENING are all `NOT
+        // MSVC`-guarded. Passing them would be accepted and do nothing.
         flags.push(
-            `-DBUILD_WITH_OZ=${balanced ? 'OFF' : 'ON'}`,
+            '-DBUILD_WITH_OZ=ON',
             `-DBUILD_WITH_NO_OUTLINE=${tuned ? 'ON' : 'OFF'}`,
+            `-DBUILD_WITH_QJS_SPEED=${balanced ? 'ON' : 'OFF'}`,
             '-DBUILD_WITH_HIDDEN_VISIBILITY=ON',
             '-DBUILD_WITH_ICF=ON',
             '-DBUILD_WITH_STRIP=ON',

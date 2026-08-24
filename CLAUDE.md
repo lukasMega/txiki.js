@@ -251,6 +251,7 @@ BUILD_WITH_OZ=ON make                  # Clang -Oz aggressive size for MinSizeRe
 BUILD_WITH_HIDDEN_VISIBILITY=ON make   # Hide non-exported symbols (-fvisibility=hidden)
 BUILD_WITH_ICF=ON make                 # Fold identical functions at link (lld/gold; not macOS)
 BUILD_WITH_NO_OUTLINE=ON make          # Disable Clang's AArch64 machine outliner (bigger, faster)
+BUILD_WITH_QJS_SPEED=ON make           # deps/quickjs at -Os, rest of the binary at -Oz
 BUILD_WITH_REPRODUCIBLE_PATHS=ON make  # Remap __FILE__/debug paths (no absolute source paths)
 BUILD_WITH_HARDENING=ON make           # Stack protector, zero-init, FORTIFY, arm64 PAC/BTI
 # BUILD_WITH_COMPRESSED_BYTECODE=ON    # Deflate embedded bytecode -- REQUIRES `make js TJSC_COMPRESS=-z`
@@ -283,6 +284,36 @@ interpreter dispatch loop, which measured here (macOS arm64, `min`) costs 30% of
 4% of the binary. The compile-time `-mno-outline` alone is a *silent no-op under LTO* — `-flto=thin`
 runs codegen at the link — so the option also adds `-Wl,-mllvm,-enable-machine-outliner=never` to
 `tjs-cli`. Both halves probe first and warn rather than fail on GCC (no outliner) or bfd ld.
+
+`BUILD_WITH_QJS_SPEED` is the better dial, and it makes `BUILD_WITH_NO_OUTLINE` redundant rather
+than additive. `-Oz` is a whole-binary setting, but this binary is not uniform: `deps/quickjs` is
+where ~all JS execution time goes, while libuv, libwebsockets, mbedTLS and ada are cold once the
+runtime is up. The option appends `-Os` to the `qjs` target's `COMPILE_OPTIONS` — last `-O` on the
+command line wins — so only the engine is raised. Measured (macOS arm64, `min`, the §9 workload
+from the QuickJS size study; min user-CPU of 7):
+
+| variant | bytes | Δ size | time | Δ time |
+| --- | ---: | ---: | ---: | ---: |
+| `smallest` (`-Oz` + LTO) | 1,976,112 | — | 1.29 s | — |
+| `tuned` (outliner off) | 2,057,888 | +4.1% | 0.94 s | -27% |
+| **`balanced` (QuickJS at `-Os`)** | **2,107,728** | **+6.7%** | **0.75 s** | **-41%** |
+| both | 2,140,416 | +8.3% | 0.75 s | -41% |
+| old `balanced` (`-Os`, no LTO) | 2,189,136 | +10.8% | 0.76 s | -41% |
+
+Two things that are easy to get wrong here. First, this **survives LTO** where `-mno-outline` does
+not: `-Os`/`-Oz` are recorded per function in the IR as the `optsize`/`minsize` attributes, which
+the LTO backend reads at link. Second, it **subsumes** the outliner fix — the machine outliner only
+runs on `minsize` functions and `-Os` does not set that, so the interpreter is already out of its
+reach. Stacking both measured +32,688 B for no change in run time, which is why
+`--optimization balanced` sets `BUILD_WITH_NO_OUTLINE=OFF`.
+
+The old `balanced` recipe (whole binary at `-Os`, LTO off) is strictly worse on size at the same
+speed, and was retired for this. It kept one edge: the `timers` benchmark op is ~11% faster there,
+because libuv is `-Os` too. If an event-loop-bound workload matters more than 81 KB, that is the
+one case for building it by hand.
+
+On GCC this is a no-op (`-Oz` never applied, so the engine is already `-Os`), and it is
+`NOT MSVC`-guarded like the rest, warning if requested there.
 
 ## Testing a slim / dist binary
 

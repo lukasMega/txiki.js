@@ -49,9 +49,10 @@ Full documentation is available at **[txikijs.org](https://txikijs.org)**.
 ## Slim builds (this fork)
 
 This fork publishes size-optimized binaries alongside the normal build. Six smallest profiles use
-`MinSizeRel`/`-Oz` + LTO. Two `min`-feature variants trade size back for speed: `tuned-min` keeps
-`-Oz` + LTO but turns off Clang's AArch64 machine outliner, and `balanced-min` drops to
-`MinSizeRel`/`-Os` without LTO. Every profile also uses dead-strip + ICF + hidden visibility +
+`MinSizeRel`/`-Oz` + LTO. Two `min`-feature variants trade size back for speed, both still
+`-Oz` + LTO overall: `tuned-min` turns off Clang's AArch64 machine outliner, and `balanced-min`
+raises `deps/quickjs` — where essentially all JS execution time goes — back to `-Os`, leaving the
+cold two thirds of the binary at `-Oz`. Every profile also uses dead-strip + ICF + hidden visibility +
 stripped symbols, with compressed bytecode, no mimalloc and no WebAssembly. Feature profiles
 differ in whether FFI, TLS and SQLite are compiled in.
 
@@ -76,10 +77,15 @@ artifacts are built with GCC while Windows uses MSVC, so `tuned-min` — which i
 outliner disabled — has nothing to disable on three of the four platforms. macOS is the only place
 the codegen profiles are distinct binaries.
 
-On macOS arm64, against `min`, a fib/property/sort/string/Map workload runs **29% faster** on
-`tuned-min` for +48 KB and **41% faster** on `balanced-min` for +180 KB. If you care about
-execution speed more than the last 100 KB, those are the two to reach for; if you care about size,
-`min` is still the floor everywhere.
+> The `balanced-min` row is the last release built with the old `-Os`, no-LTO recipe. It now
+> raises only `deps/quickjs` to `-Os` instead, measured ~80 KB smaller at the same speed on macOS,
+> and — like `tuned-min` — asking for nothing GCC or MSVC can do, so that row moves at the next
+> release and is expected to join the starred group on three of the four platforms.
+
+On macOS arm64, against `min`, a fib/property/sort/string/Map workload runs **27% faster** on
+`tuned-min` for **+4.1%** size and **41% faster** on `balanced-min` for **+6.7%**. If you care
+about execution speed more than the last 100 KB, those are the two to reach for; if you care about
+size, `min` is still the floor everywhere.
 
 SQLite is the single most expensive optional feature here — up to **+0.95 MiB** over `min`, more
 than TLS and the bundled CA together — which is why it is off in the other four profiles. Only

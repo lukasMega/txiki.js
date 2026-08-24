@@ -292,7 +292,7 @@ jobs:
             echo
             echo "| profile | codegen | FFI (\`tjs:ffi\`) | TLS (HTTPS/WSS/TLSSocket) | SQLite (\`tjs:sqlite\`) |"
             echo "| --- | --- | --- | --- | --- |"
-            echo "| \`balanced-min\`   | \`-Os\`, no LTO       | no  | no               | no  |"
+            echo "| \`balanced-min\`   | \`-Oz\` + LTO, QuickJS at \`-Os\` | no  | no      | no  |"
             echo "| \`tuned-min\`      | \`-Oz\` + LTO, no outliner | no  | no          | no  |"
             echo "| \`min\`            | \`-Oz\` + LTO        | no  | no               | no  |"
             echo "| \`ffi\`            | \`-Oz\` + LTO        | yes | no               | no  |"
@@ -302,9 +302,9 @@ jobs:
             echo "| \`ffi-tls-sqlite\` | \`-Oz\` + LTO        | yes | yes (bundled CA) | yes |"
             echo
             echo "The codegen column describes what is *requested*. \`-Oz\` and the"
-            echo "AArch64 machine outliner are Clang-only, so the Linux (GCC) and"
-            echo "Windows (MSVC) artifacts fall back to \`-Os\`/\`/O1\` and the three"
-            echo "\`min\` variants differ there only in LTO. On macOS all three are"
+            echo "AArch64 machine outliner are Clang-only, so on the Linux (GCC) and"
+            echo "Windows (MSVC) artifacts all three \`min\` variants fall back to"
+            echo "\`-Os\`/\`/O1\` + LTO and are the same binary. On macOS all three are"
             echo "distinct; see BUILDINFO.txt per artifact."
             echo
             echo "\`localStorage\` is persistent only on the SQLite profiles; the"
