@@ -101,12 +101,6 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // 2026-08-20 at v26.6.0 (24 cells, all suites passing). The balanced-min and
 // tuned-min measurements are added after their first four-platform CI run.
 //
-// STALE for linux-x64 and linux-arm64 as of 2026-08-24: those jobs now build
-// with clang instead of the runner's default GCC, so -Oz and the machine
-// outliner actually apply there. The budget still holds (it is measured x1.05
-// and the numbers move down, not up), but the "delta vs the recorded baseline"
-// note will read large until these are re-measured from a green run.
-//
 // A single number per profile does not survive contact with four platforms: the
 // spread across them is larger than the spread across profiles. linux-arm64 is
 // ~265 KB above linux-x64 on the same profile (arm64 PAC/BTI prologues are not
