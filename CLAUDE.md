@@ -248,7 +248,13 @@ together; enabling one alone makes the loader inflate garbage. `BUILD_WITH_HIDDE
 all `NOT MSVC`-guarded — they are silently no-ops on an MSVC build.
 
 `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
-MinSizeRel flag strings; no-op for other build types and a warning under GCC). `BUILD_WITH_ICF`
+MinSizeRel flag strings; no-op for other build types and a warning under GCC). **`dist.yml` and
+`verify.yml` therefore select clang explicitly on their Linux jobs** — the runners default to GCC,
+which silently downgraded every published Linux artifact to `-Os` and made `tuned-min` a
+byte-identical duplicate of `min` there. Set it from a conditional step writing to `$GITHUB_ENV`,
+never a job-level `env:` expression: `build-dist.mjs`'s `detectMsvc()` reads `process.env.CC` and
+treats an **empty** value as MSVC, so an expression evaluating to `''` on the macOS or Windows leg
+would silently disable every non-MSVC flag. `BUILD_WITH_ICF`
 needs lld or gold and is skipped on Apple ld64 (which already gets `-Wl,-dead_strip` from
 `BUILD_WITH_GC_SECTIONS`); it folds at `--icf=safe`. `BUILD_WITH_NO_UNWIND_TABLES`
 is experimental — it drops async unwind/`.eh_frame` tables (breaks signal/crash backtraces) while keeping
