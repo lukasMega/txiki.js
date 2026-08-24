@@ -262,14 +262,16 @@ together; enabling one alone makes the loader inflate garbage. `BUILD_WITH_HIDDE
 `BUILD_WITH_REPRODUCIBLE_PATHS`, `BUILD_WITH_HARDENING` and `BUILD_WITH_NO_UNWIND_TABLES` are
 all `NOT MSVC`-guarded — they are silently no-ops on an MSVC build.
 
+**The Linux CI jobs deliberately keep the runner's default GCC.** Selecting clang there so that
+`BUILD_WITH_OZ` actually applies looks like free size, and it is not: measured 2026-08-24 on
+`linux-x64` `min`, clang `-Oz` + LTO came out at **1,976,816 B against GCC `-Os` + LTO's
+1,918,920 B — 57,896 B *bigger* (+3.0%)**, and it switches the machine outliner on, so the binary
+is likely slower too. Tried in PR #27 and reverted in #29. The consequence to accept: on Linux and
+on MSVC, `-Oz` never applies, so `tuned-min` and `balanced-min` are byte-identical duplicates of
+`min` there. macOS is the only platform where the three differ.
+
 `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
-MinSizeRel flag strings; no-op for other build types and a warning under GCC). **`dist.yml` and
-`verify.yml` therefore select clang explicitly on their Linux jobs** — the runners default to GCC,
-which silently downgraded every published Linux artifact to `-Os` and made `tuned-min` a
-byte-identical duplicate of `min` there. Set it from a conditional step writing to `$GITHUB_ENV`,
-never a job-level `env:` expression: `build-dist.mjs`'s `detectMsvc()` reads `process.env.CC` and
-treats an **empty** value as MSVC, so an expression evaluating to `''` on the macOS or Windows leg
-would silently disable every non-MSVC flag. `BUILD_WITH_ICF`
+MinSizeRel flag strings; no-op for other build types and a warning under GCC). `BUILD_WITH_ICF`
 needs lld or gold and is skipped on Apple ld64 (which already gets `-Wl,-dead_strip` from
 `BUILD_WITH_GC_SECTIONS`); it folds at `--icf=safe`. `BUILD_WITH_NO_UNWIND_TABLES`
 is experimental — it drops async unwind/`.eh_frame` tables (breaks signal/crash backtraces) while keeping
