@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 1,
+  "version": "slim-v26.6.0-8-4-g709c52a",
+  "commit": "709c52a2709b8ae864e9ea539edc7111f4e80fe3",
+  "dirty": false,
+  "date": "2026-08-24T21:09:25.053Z",
+  "platform": "macos-arm64",
+  "quick": false,
+  "config": {
+    "spawns": 50,
+    "warmups": 10,
+    "reps": 5,
+    "timeTool": "/usr/bin/time (bsd)"
+  },
+  "runner": {
+    "image": "macos15",
+    "ci": true,
+    "cpuModel": "Apple M1 (Virtual)",
+    "cores": 3,
+    "memTotal": 7516192768,
+    "release": "24.6.0"
+  },
+  "toolchain": {
+    "cc": "Apple clang version 17.0.0 (clang-1700.0.13.5)",
+    "cmake": "cmake version 4.4.0",
+    "node": "v24.19.0"
+  },
+  "binaries": {
+    "full": {
+      "path": "build/tjs",
+      "features": {
+        "wasm": true,
+        "sqlite": true,
+        "tls": true,
+        "bundledCa": true,
+        "webcrypto": true,
+        "ffi": true
+      },
+      "cli": {
+        "repl": true,
+        "eval": true,
+        "serve": true,
+        "bundler": true,
+        "testRunner": true,
+        "compile": true,
+        "app": true,
+        "help": true,
+        "tlsCa": true
+      },
+      "size": {
+        "raw": 6064768,
+        "gzip": 2899589,
+        "text": 5226496,
+        "data": 98304
+      },
+      "startup": {
+        "noopMedianMs": 12.166,
+        "noopMadMs": 1.947,
+        "noopUnstable": true,
+        "importStdlibMedianMs": 12.629,
+        "importStdlibMadMs": 1.046,
+        "importStdlibUnstable": true,
+        "runs": 50
+      },
+      "memory": {
+        "baselineRssBytes": 5816320,
+        "workloadPeakRssBytes": 64110592
+      },
+      "cpu": {
+        "userS": 0.66,
+        "sysS": 0,
+        "wallS": 0.67,
+        "efficiency": 0.985
+      },
+      "ops": {
+        "mandelbrot": 278647.04,
+        "sort": 1727115.72,
+        "string-build": 3409672.1,
+        "json-parse": 155.84,
+        "json-parse-mbps": 110.68,
+        "json-stringify": 90.84,
+        "regex-match": 1102475.06,
+        "regex-replace": 33.77,
+        "regex-split": 12.1,
+        "sha256": 1138.82,
+        "sha256-mbps": 284.71,
+        "getrandomvalues": 89928.06,
+        "timers": 1939194.61,
+        "microtasks": 2819522.37,
+        "fs-write": 8218.05,
+        "fs-read": 28555.11,
+        "fs-stat": 38846.01,
+        "fs-readdir": 473.94
+      },
+      "skipped": []
+    },
+    "ffi-tls": {
+      "path": "dist/ffi-tls/tjs",
+      "features": {
+        "wasm": false,
+        "sqlite": false,
+        "tls": true,
+        "bundledCa": true,
+        "webcrypto": true,
+        "ffi": true
+      },
+      "cli": {
+        "repl": true,
+        "eval": false,
+        "serve": false,
+        "bundler": false,
+        "testRunner": false,
+        "compile": true,
+        "app": false,
+        "help": false,
+        "tlsCa": true
+      },
+      "size": {
+        "raw": 2540336,
+        "gzip": 1427082,
+        "text": 2392064,
+        "data": 16384
+      },
+      "startup": {
+        "noopMedianMs": 10.802,
+        "noopMadMs": 0.723,
+        "noopUnstable": true,
+        "importStdlibMedianMs": 10.713,
+        "importStdlibMadMs": 1.026,
+        "importStdlibUnstable": true,
+        "runs": 50
+      },
+      "memory": {
+        "baselineRssBytes": 4800512,
+        "workloadPeakRssBytes": 64798720
+      },
+      "cpu": {
+        "userS": 1.28,
+        "sysS": 0.04,
+        "wallS": 1.32,
+        "efficiency": 1
+      },
+      "ops": {
+        "mandelbrot": 201872.05,
+        "sort": 1178147.72,
+        "string-build": 2222963.21,
+        "json-parse": 102.68,
+        "json-parse-mbps": 72.92,
+        "json-stringify": 46.62,
+        "regex-match": 907688.12,
+        "regex-replace": 31.65,
+        "regex-split": 6.18,
+        "sha256": 1209.37,
+        "sha256-mbps": 302.34,
+        "getrandomvalues": 95739.59,
+        "timers": 1260482.49,
+        "microtasks": 1366194.87,
+        "fs-write": 6922.49,
+        "fs-read": 19596.32,
+        "fs-stat": 24233.02,
+        "fs-readdir": 316.34
+      },
+      "skipped": []
+    },
+    "ffi": {
+      "path": "dist/ffi/tjs",
+      "features": {
+        "wasm": false,
+        "sqlite": false,
+        "tls": false,
+        "bundledCa": false,
+        "webcrypto": true,
+        "ffi": true
+      },
+      "cli": {
+        "repl": true,
+        "eval": false,
+        "serve": false,
+        "bundler": false,
+        "testRunner": false,
+        "compile": true,
+        "app": false,
+        "help": false,
+        "tlsCa": false
+      },
+      "size": {
+        "raw": 2059776,
+        "gzip": 1130686,
+        "text": 1933312,
+        "data": 16384
+      },
+      "startup": {
+        "noopMedianMs": 11.042,
+        "noopMadMs": 0.353,
+        "noopUnstable": false,
+        "importStdlibMedianMs": 10.515,
+        "importStdlibMadMs": 0.997,
+        "importStdlibUnstable": true,
+        "runs": 50
+      },
+      "memory": {
+        "baselineRssBytes": 4636672,
+        "workloadPeakRssBytes": 65028096
+      },
+      "cpu": {
+        "userS": 1.26,
+        "sysS": 0.03,
+        "wallS": 1.31,
+        "efficiency": 0.985
+      },
+      "ops": {
+        "mandelbrot": 197672.71,
+        "sort": 1163338.55,
+        "string-build": 2222057.63,
+        "json-parse": 99.45,
+        "json-parse-mbps": 70.63,
+        "json-stringify": 45.55,
+        "regex-match": 810339.94,
+        "regex-replace": 29.5,
+        "regex-split": 6.36,
+        "sha256": 1226.99,
+        "sha256-mbps": 306.75,
+        "getrandomvalues": 96093.79,
+        "timers": 1315005.66,
+        "microtasks": 1354881.37,
+        "fs-write": 6962.17,
+        "fs-read": 19543.97,
+        "fs-stat": 24562.38,
+        "fs-readdir": 319.9
+      },
+      "skipped": []
+    },
+    "min": {
+      "path": "dist/min/tjs",
+      "features": {
+        "wasm": false,
+        "sqlite": false,
+        "tls": false,
+        "bundledCa": false,
+        "webcrypto": true,
+        "ffi": false
+      },
+      "cli": {
+        "repl": true,
+        "eval": false,
+        "serve": false,
+        "bundler": false,
+        "testRunner": false,
+        "compile": true,
+        "app": false,
+        "help": false,
+        "tlsCa": false
+      },
+      "size": {
+        "raw": 2008960,
+        "gzip": 1095741,
+        "text": 1884160,
+        "data": 16384
+      },
+      "startup": {
+        "noopMedianMs": 11.727,
+        "noopMadMs": 0.419,
+        "noopUnstable": false,
+        "importStdlibMedianMs": 11.289,
+        "importStdlibMadMs": 0.524,
+        "importStdlibUnstable": false,
+        "runs": 50
+      },
+      "memory": {
+        "baselineRssBytes": 4702208,
+        "workloadPeakRssBytes": 49807360
+      },
+      "cpu": {
+        "userS": 1.16,
+        "sysS": 0.03,
+        "wallS": 1.19,
+        "efficiency": 1
+      },
+      "ops": {
+        "mandelbrot": 198411.93,
+        "sort": 1158714.99,
+        "string-build": 2227088.82,
+        "json-parse": 102.28,
+        "json-parse-mbps": 72.64,
+        "json-stringify": 47.24,
+        "regex-match": 893774.86,
+        "regex-replace": 28.47,
+        "regex-split": 6.42,
+        "sha256": 1192.85,
+        "sha256-mbps": 298.21,
+        "getrandomvalues": 94068.95,
+        "timers": 1250905.34,
+        "microtasks": 1369442.8,
+        "fs-write": 5916.69,
+        "fs-read": 17988.85,
+        "fs-stat": 22790.81,
+        "fs-readdir": 363.04
+      },
+      "skipped": []
+    },
+    "tls": {
+      "path": "dist/tls/tjs",
+      "features": {
+        "wasm": false,
+        "sqlite": false,
+        "tls": true,
+        "bundledCa": true,
+        "webcrypto": true,
+        "ffi": false
+      },
+      "cli": {
+        "repl": true,
+        "eval": false,
+        "serve": false,
+        "bundler": false,
+        "testRunner": false,
+        "compile": true,
+        "app": false,
+        "help": false,
+        "tlsCa": true
+      },
+      "size": {
+        "raw": 2506016,
+        "gzip": 1394133,
+        "text": 2359296,
+        "data": 16384
+      },
+      "startup": {
+        "noopMedianMs": 10.582,
+        "noopMadMs": 1.165,
+        "noopUnstable": true,
+        "importStdlibMedianMs": 11.127,
+        "importStdlibMadMs": 0.673,
+        "importStdlibUnstable": true,
+        "runs": 50
+      },
+      "memory": {
+        "baselineRssBytes": 4816896,
+        "workloadPeakRssBytes": 64421888
+      },
+      "cpu": {
+        "userS": 1.22,
+        "sysS": 0.05,
+        "wallS": 1.27,
+        "efficiency": 1
+      },
+      "ops": {
+        "mandelbrot": 201547.82,
+        "sort": 1175302.2,
+        "string-build": 2271694.68,
+        "json-parse": 102.28,
+        "json-parse-mbps": 72.64,
+        "json-stringify": 46.72,
+        "regex-match": 872752.66,
+        "regex-replace": 29.52,
+        "regex-split": 6.2,
+        "sha256": 1204.24,
+        "sha256-mbps": 301.06,
+        "getrandomvalues": 93057.88,
+        "timers": 1370739.91,
+        "microtasks": 1364870.95,
+        "fs-write": 5954.15,
+        "fs-read": 17480.48,
+        "fs-stat": 21998.33,
+        "fs-readdir": 295.66
+      },
+      "skipped": []
+    }
+  }
+}
