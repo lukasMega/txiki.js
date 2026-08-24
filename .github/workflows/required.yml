@@ -1,0 +1,79 @@
+name: Required
+
+# The two required status checks that must report on EVERY pull request.
+#
+# They exist here, rather than being taken from upstream's ci.yml, because of a
+# GitHub rule with no workaround: a workflow skipped by path filtering reports
+# no check at all, and a required context that never reports leaves the PR
+# permanently "Expected" and unmergeable. ci.yml carries a `paths-ignore` list
+# (upstream's, plus this fork's tooling paths), so its `Lint` and `Codegen`
+# cannot be the required ones.
+#
+# This workflow therefore has NO path filter of any kind, and must not grow one.
+# The duplication with ci.yml's `Lint`/`Codegen` is the price: those two still
+# run there for build-affecting PRs, advisory. Both jobs are ~2 minutes, which
+# is what makes paying it twice acceptable.
+#
+# Keep the steps in step with upstream's. If upstream changes how it lints or
+# regenerates bundles, this file has to follow -- nothing detects the drift.
+
+on:
+  pull_request:
+  push:
+    branches: [ slim ]
+  workflow_dispatch:
+
+concurrency:
+  group: required-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: lint
+    # Pinned to 24.04 for clang-format 18, which is the version this repo is
+    # formatted against. A newer formatter reformats files that 18 then wants
+    # back, and the resulting red cannot be reproduced on a machine with 22.
+    # See the clang-format section of CLAUDE.md.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v7
+        with:
+          check-latest: true
+          node-version-file: '.nvmrc'
+      - name: Install dependencies
+        run: |
+          npm install
+          sudo apt update
+          sudo apt install -y clang-format
+          clang-format --version
+      - name: Run the linter
+        run: npm run lint
+      - name: Run the formatter
+        run: clang-format -i src/*.{c,h}
+      - name: Check if the tree is dirty
+        run: $(exit $(git status --porcelain --untracked-files=no | head -255 | wc -l)) || (echo "Dirty git tree"; git diff; exit 1)
+
+  codegen:
+    name: codegen
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v7
+        with:
+          check-latest: true
+          node-version-file: '.nvmrc'
+      - name: Install dependencies
+        run: npm install
+      # src/bundles/c is tracked in this fork, so a bundle that disagrees with
+      # its source in src/js is a real defect, not a build artifact difference.
+      - name: Build it
+        run: make js
+      - name: Check if the git repository is clean
+        run: $(exit $(git status --porcelain --untracked-files=no | head -255 | wc -l)) || (echo "Dirty git tree"; git diff; exit 1)

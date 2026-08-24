@@ -472,13 +472,31 @@ fork-owned workflows, `cmake/slim.cmake` and `scripts/build-dist.mjs`. It takes 
 from ~25 minutes of CI to ~8. `slim.mk` is deliberately **not** in the list: `make js` includes it,
 so it can break the `Codegen` job.
 
-The cost is real and is not a bug to re-fix by retrying: **`Lint` and `Codegen` are required status
-checks that live in `ci.yml`.** GitHub does not report a check for a workflow that path-filtering
-skipped, so a PR touching only ignored paths shows them as permanently "Expected" and cannot be
-merged through the normal button. `slim` has `enforce_admins=false`, so the repo owner can still
-merge; nobody else can. `verify.yml` has the same latent shape — its six job names are the other
-six required contexts and its own `paths-ignore` covers `**/*.md`.
+## Required status checks must come from an unfiltered workflow
 
-Fixing it properly means moving those two jobs into a fork-owned workflow with no path filter and
-repointing branch protection at the new context names. Until then, the admin bypass is the escape
-hatch. See `.claude/plans/2026-08-21_ci-speedup.md`.
+GitHub reports **no check at all** for a workflow that path filtering skipped. A required context
+that never reports leaves the PR permanently "Expected" and unmergeable through the normal button.
+That rule is what shapes the whole check layout here:
+
+| workflow | filtered? | provides |
+| --- | --- | --- |
+| `required.yml` (fork-owned) | **never** — do not add one | `lint`, `codegen` — required |
+| `verify.yml` (fork-owned) | **never** — filter removed for this reason | the six profile names — required |
+| `ci.yml` (upstream) | yes, incl. fork-only paths | `Lint`, `Codegen` and 34 others — all advisory |
+
+`required.yml` duplicates upstream's `Lint`/`Codegen` steps rather than reusing them, because
+`ci.yml` is path-filtered and cannot host a required context. Both jobs are ~2 minutes, which is
+what makes paying for them twice acceptable. **Nothing detects drift** between the two copies: if
+upstream changes how it lints or regenerates bundles, `required.yml` has to be updated by hand.
+
+`verify.yml` carried **two** filters and both hit this. `paths-ignore: website/**, types/**,
+**/*.md` meant a docs-only PR could not be merged at all; `branches: [ slim ]` on the
+`pull_request` trigger meant a *stacked* PR could not either, since a PR based on another feature
+branch is not a PR "to slim" and the six contexts simply never appeared. Retargeting such a PR
+afterwards does not help — `edited` is not one of the events that starts a workflow, so the checks
+still never run. Close and reopen it, which fires `reopened`.
+
+Running six profile jobs on a typo fix is the cheaper mistake. The `push` trigger keeps its branch
+filter: pushes to a feature branch are already covered by that branch's PR.
+
+See `.claude/plans/2026-08-21_ci-speedup.md`.
