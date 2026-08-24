@@ -474,7 +474,14 @@ That rule is what shapes the whole check layout here:
 what makes paying for them twice acceptable. **Nothing detects drift** between the two copies: if
 upstream changes how it lints or regenerates bundles, `required.yml` has to be updated by hand.
 
-`verify.yml` used to carry `paths-ignore: website/**, types/**, **/*.md`, which meant a docs-only
-PR could not be merged at all. Running six profile jobs on a typo fix is the cheaper mistake.
+`verify.yml` carried **two** filters and both hit this. `paths-ignore: website/**, types/**,
+**/*.md` meant a docs-only PR could not be merged at all; `branches: [ slim ]` on the
+`pull_request` trigger meant a *stacked* PR could not either, since a PR based on another feature
+branch is not a PR "to slim" and the six contexts simply never appeared. Retargeting such a PR
+afterwards does not help — `edited` is not one of the events that starts a workflow, so the checks
+still never run. Close and reopen it, which fires `reopened`.
+
+Running six profile jobs on a typo fix is the cheaper mistake. The `push` trigger keeps its branch
+filter: pushes to a feature branch are already covered by that branch's PR.
 
 See `.claude/plans/2026-08-21_ci-speedup.md`.
