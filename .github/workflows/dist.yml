@@ -4,9 +4,12 @@ name: Dist (slim binaries)
 # published (`release` needs: build). The size gate is tag-only so a legitimate
 # growth lands in a PR job summary instead of blocking it.
 #
-# A profile added here costs four jobs. The two alternative codegen modes
-# therefore ship only with the minimum feature set instead of doubling all six
-# smallest profiles.
+# A profile added here costs four jobs at release time. The two alternative
+# codegen modes therefore ship only with the minimum feature set instead of
+# doubling all six smallest profiles.
+#
+# A pull request runs a reduced 4 x 2 matrix instead of the full 8 x 4; `gate`
+# below emits both axes and documents what is dropped and why.
 
 on:
   workflow_dispatch:
@@ -50,11 +53,15 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decides whether a pull_request event deserves the 32-job matrix. Two ways in:
-  # the PR touches something that changes what gets built, or it carries the
-  # `auto-release` label -- the upstream-release proposal, which must have the
-  # full four-platform signal before it lands on `slim`, not verify.yml's
-  # Linux-only six.
+  # Decides whether a pull_request event deserves the matrix at all, and how much
+  # of it. Two ways in: the PR touches something that changes what gets built, or
+  # it carries the `auto-release` label -- the upstream-release proposal, which
+  # must have the full four-platform signal before it lands on `slim`, not
+  # verify.yml's Linux-only six.
+  #
+  # Emitting the matrix from here rather than declaring it statically is what lets
+  # a PR run 8 jobs where a tag runs 32; `fromJSON` on the two outputs below gives
+  # the same two-axis cross product either way.
   gate:
     name: gate
     runs-on: ubuntu-latest
@@ -63,6 +70,8 @@ jobs:
       pull-requests: read
     outputs:
       run: ${{ steps.decide.outputs.run }}
+      combos: ${{ steps.decide.outputs.combos }}
+      targets: ${{ steps.decide.outputs.targets }}
     steps:
       - name: Decide
         id: decide
@@ -74,51 +83,61 @@ jobs:
           AUTO_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'auto-release') }}
         run: |
           set -euo pipefail
-          decide() { echo "run=$1" >> "$GITHUB_OUTPUT"; echo "run=$1"; exit 0; }
 
-          [ "$EVENT" = 'pull_request' ] || decide true
+          # The eight published profiles: six feature sets at `smallest`, plus the
+          # two alternative codegen modes on the `min` feature set.
+          FULL_COMBOS='[{"profile":"min","optimization":"smallest"},{"profile":"ffi","optimization":"smallest"},{"profile":"tls","optimization":"smallest"},{"profile":"sqlite","optimization":"smallest"},{"profile":"ffi-tls","optimization":"smallest"},{"profile":"ffi-tls-sqlite","optimization":"smallest"},{"profile":"min","optimization":"tuned"},{"profile":"min","optimization":"balanced"}]'
+          FULL_TARGETS='[{"name":"linux-x86_64","os":"ubuntu-latest"},{"name":"linux-arm64","os":"ubuntu-24.04-arm"},{"name":"macos-arm64","os":"macos-15"},{"name":"windows-x86_64","os":"windows-latest"}]'
+
+          # Floor, ceiling and both codegen modes. The four profiles left out are
+          # feature unions of `min` and `ffi-tls-sqlite`, so a break in one of them
+          # that does not also break an endpoint would have to be an interaction
+          # between two optional features -- and verify.yml builds all six on Linux
+          # for every push regardless.
+          PR_COMBOS='[{"profile":"min","optimization":"smallest"},{"profile":"ffi-tls-sqlite","optimization":"smallest"},{"profile":"min","optimization":"tuned"},{"profile":"min","optimization":"balanced"}]'
+          # Which is also why the Linux half of the platform axis goes: verify.yml
+          # already covers it per push. These two are the toolchains it cannot --
+          # Apple clang, the only one that actually gets -Oz and the machine
+          # outliner, and MSVC, where six of the size/hardening levers compile out.
+          PR_TARGETS='[{"name":"macos-arm64","os":"macos-15"},{"name":"windows-x86_64","os":"windows-latest"}]'
+
+          decide() {
+            { echo "run=$1"; echo "combos=$2"; echo "targets=$3"; } >> "$GITHUB_OUTPUT"
+            echo "run=$1"
+            exit 0
+          }
+          full() { decide true "$FULL_COMBOS" "$FULL_TARGETS"; }
+
+          [ "$EVENT" = 'pull_request' ] || full
 
           if [ "$AUTO_RELEASE" = 'true' ]; then
-            echo '::notice::auto-release PR -- running the full matrix'
-            decide true
+            echo '::notice::auto-release PR -- running the full 8 x 4 matrix'
+            full
           fi
 
           # `gh pr diff --name-only` would need a checkout; the API does not.
           gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' > changed.txt
           if grep -qxE 'scripts/build-dist\.mjs|\.github/workflows/dist\.yml|CMakeLists\.txt|cmake/slim\.cmake' changed.txt; then
-            decide true
+            echo '::notice::build-affecting PR -- reduced matrix: 4 profiles x macOS/Windows'
+            decide true "$PR_COMBOS" "$PR_TARGETS"
           fi
-          decide false
+          decide false "$PR_COMBOS" "$PR_TARGETS"
 
   build:
-    name: ${{ matrix.optimization == 'smallest' && matrix.profile || format('{0}-{1}', matrix.optimization, matrix.profile) }} ${{ matrix.target.name }}
+    name: ${{ matrix.combo.optimization == 'smallest' && matrix.combo.profile || format('{0}-{1}', matrix.combo.optimization, matrix.combo.profile) }} ${{ matrix.target.name }}
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ${{ matrix.target.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      # Two axes, not `include`: an include entry whose keys are absent from the
-      # matrix is merged into every combination instead of multiplying out.
+      # Both axes come from `gate`, which is what makes the PR matrix smaller than
+      # the tag matrix. `combo` is one object rather than a profile/optimization
+      # cross product plus ten `exclude` entries: the published set is a chosen
+      # list, not a product, so enumerating it is both shorter and honest.
       matrix:
-        profile: [ min, ffi, tls, ffi-tls, sqlite, ffi-tls-sqlite ]
-        optimization: [ smallest, balanced, tuned ]
-        exclude:
-          - { profile: ffi, optimization: balanced }
-          - { profile: tls, optimization: balanced }
-          - { profile: ffi-tls, optimization: balanced }
-          - { profile: sqlite, optimization: balanced }
-          - { profile: ffi-tls-sqlite, optimization: balanced }
-          - { profile: ffi, optimization: tuned }
-          - { profile: tls, optimization: tuned }
-          - { profile: ffi-tls, optimization: tuned }
-          - { profile: sqlite, optimization: tuned }
-          - { profile: ffi-tls-sqlite, optimization: tuned }
-        target:
-          - { name: linux-x86_64, os: ubuntu-latest }
-          - { name: linux-arm64, os: ubuntu-24.04-arm }
-          - { name: macos-arm64, os: macos-15 }
-          - { name: windows-x86_64, os: windows-latest }
+        combo: ${{ fromJSON(needs.gate.outputs.combos) }}
+        target: ${{ fromJSON(needs.gate.outputs.targets) }}
     env:
       # `mise run` installs every tool in mise.toml first, and upstream publishes
       # no Linux asset for the `ubi:saghul/txiki.js` pin -- the Linux jobs would
@@ -143,7 +162,7 @@ jobs:
           node-version-file: '.nvmrc'
 
       - name: Install dependencies (Linux)
-        if: runner.os == 'Linux' && contains(matrix.profile, 'ffi')
+        if: runner.os == 'Linux' && contains(matrix.combo.profile, 'ffi')
         run: |
           sudo apt update
           sudo apt install -y libffi-dev
@@ -158,7 +177,7 @@ jobs:
           vcpkgGitCommitId: '66c0373dc7fca549e5803087b9487edfe3aca0a1'
 
       - name: Install libffi (Windows)
-        if: runner.os == 'Windows' && contains(matrix.profile, 'ffi')
+        if: runner.os == 'Windows' && contains(matrix.combo.profile, 'ffi')
         env:
           VCPKG_DEFAULT_TRIPLET: x64-windows
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
@@ -174,16 +193,16 @@ jobs:
       - name: Build (Unix)
         if: runner.os != 'Windows'
         run: >-
-          mise run dist -- --profile ${{ matrix.profile }} --out dist --host-tjs
-          --optimization ${{ matrix.optimization }}
+          mise run dist -- --profile ${{ matrix.combo.profile }} --out dist --host-tjs
+          --optimization ${{ matrix.combo.optimization }}
           ${{ startsWith(github.ref, 'refs/tags/') && '--enforce-size' || '' }}
 
       - name: Build (Windows)
         # node:util parseArgs refuses an option value that starts with a dash
         # unless it is written with `=`, so these cannot be split into two words.
         run: >
-          node scripts/build-dist.mjs --profile ${{ matrix.profile }} --out dist --host-tjs
-          --optimization ${{ matrix.optimization }}
+          node scripts/build-dist.mjs --profile ${{ matrix.combo.profile }} --out dist --host-tjs
+          --optimization ${{ matrix.combo.optimization }}
           ${{ startsWith(github.ref, 'refs/tags/') && '--enforce-size' || '' }}
           "--cmake-arg=-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
           "--cmake-arg=-DVCPKG_TARGET_TRIPLET=x64-windows-static"
@@ -219,7 +238,7 @@ jobs:
           fi
 
           {
-            echo "### ${{ matrix.optimization == 'smallest' && matrix.profile || format('{0}-{1}', matrix.optimization, matrix.profile) }} ${{ matrix.target.name }}"
+            echo "### ${{ matrix.combo.optimization == 'smallest' && matrix.combo.profile || format('{0}-{1}', matrix.combo.optimization, matrix.combo.profile) }} ${{ matrix.target.name }}"
             echo
             echo "| OK | SKIP | FAIL | TIMEOUT |"
             echo "| ---: | ---: | ---: | ---: |"
@@ -232,7 +251,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: txiki-slim-${{ matrix.optimization == 'smallest' && matrix.profile || format('{0}-{1}', matrix.optimization, matrix.profile) }}-${{ matrix.target.name }}
+          name: txiki-slim-${{ matrix.combo.optimization == 'smallest' && matrix.combo.profile || format('{0}-{1}', matrix.combo.optimization, matrix.combo.profile) }}-${{ matrix.target.name }}
           path: dist
 
   # Every profile lands on one Release as txiki-slim-<profile>-<platform>.zip.

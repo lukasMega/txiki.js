@@ -419,6 +419,15 @@ paths never starts the workflow at all. `gate` therefore re-implements the path 
 required check counts as a pass in branch protection, so dropping that label from a release PR
 silently bypasses the four-platform signal.
 
+`gate` also emits **both matrix axes** as JSON, which is what lets a PR run 8 jobs where a tag runs
+32. A tag, a dispatch or an `auto-release` PR gets the full 8 profiles × 4 platforms; an ordinary
+build-affecting PR gets 4 profiles (`min`, `ffi-tls-sqlite`, `tuned-min`, `balanced-min` — floor,
+ceiling and both codegen modes) × macOS + Windows only. The Linux half is dropped because
+`verify.yml` already builds and tests all six feature profiles on Linux for every push; what it
+cannot cover is Apple clang (the only toolchain that actually gets `-Oz` and the machine outliner)
+and MSVC. The four middle profiles are feature unions of the two endpoints. The consequence to
+keep in mind: a Linux-only regression in `build-dist.mjs` now surfaces in `verify.yml`, not here.
+
 Both build with `--host-tjs` (driver + fixtures into `build-host`) and then run the suite with
 `TJS_TEST_EXE` and `TJS_TEST_LIBDIR` pointed at the artifact and that tree. The feature vector (`wasm`, `sqlite`,
 `webcrypto`, `ffi`, `tls`, `bundledCa`) is asserted by the smoke test *inside* `build-dist.mjs`,
@@ -438,3 +447,23 @@ Use `mise run format`, not `make format`. It resolves `$CLANG_FORMAT`, then `cla
 then `clang-format`, and refuses to run at all unless the major version is 18. Do not pin the
 version in `.github/workflows/ci.yml` — that file is upstream-owned and the pin belongs on our
 side of the split.
+
+## The one deliberate fork edit inside `ci.yml`
+
+`ci.yml` is upstream-owned and the fork's delta there is exactly one block: extra `paths-ignore`
+entries, marked with a `Fork-only additions below this line` comment. Everything listed is a file
+that cannot change what a default `make` produces — docs, `mise.toml`, `benchmarks/**`, the
+fork-owned workflows, `cmake/slim.cmake` and `scripts/build-dist.mjs`. It takes a tooling-only PR
+from ~25 minutes of CI to ~8. `slim.mk` is deliberately **not** in the list: `make js` includes it,
+so it can break the `Codegen` job.
+
+The cost is real and is not a bug to re-fix by retrying: **`Lint` and `Codegen` are required status
+checks that live in `ci.yml`.** GitHub does not report a check for a workflow that path-filtering
+skipped, so a PR touching only ignored paths shows them as permanently "Expected" and cannot be
+merged through the normal button. `slim` has `enforce_admins=false`, so the repo owner can still
+merge; nobody else can. `verify.yml` has the same latent shape — its six job names are the other
+six required contexts and its own `paths-ignore` covers `**/*.md`.
+
+Fixing it properly means moving those two jobs into a fork-owned workflow with no path filter and
+repointing branch protection at the new context names. Until then, the admin bypass is the escape
+hatch. See `.claude/plans/2026-08-21_ci-speedup.md`.
