@@ -56,25 +56,30 @@ stripped symbols, with compressed bytecode, no mimalloc and no WebAssembly. Feat
 differ in whether FFI, TLS and SQLite are compiled in.
 
 Sizes are the **uncompressed `tjs` binary** from release
-[`slim-v26.6.0-7`](https://github.com/lukasMega/txiki.js-with-slim-builds/releases/tag/slim-v26.6.0-7),
+[`slim-v26.6.0-8`](https://github.com/lukasMega/txiki.js-with-slim-builds/releases/tag/slim-v26.6.0-8),
 measured from the published artifacts, in MiB:
 
 | profile | FFI | TLS | SQLite | linux-x86_64 | linux-arm64 | macos-arm64 | windows-x86_64 |
 | --- | :-: | :-: | :-: | ---: | ---: | ---: | ---: |
-| `balanced-min` | — | — | — | *(pending)* | *(pending)* | 2.09\* | *(pending)* |
-| `tuned-min` | — | — | — | *(pending)* | *(pending)* | 1.96\* | *(pending)* |
+| `balanced-min` | — | — | — | 1.86 | 2.15 | 2.09 | 2.32 |
+| `tuned-min` | — | — | — | 1.83\* | 2.08\* | 1.96 | 2.31\* |
 | `min` | — | — | — | **1.83** | 2.08 | 1.92 | 2.31 |
 | `ffi` | ✓ | — | — | 1.87 | 2.15 | 1.96 | 2.37 |
-| `tls` | — | ✓ | — | 2.25 | 2.58 | 2.37 | 2.79 |
+| `tls` | — | ✓ | — | 2.26 | 2.58 | 2.39 | 2.79 |
 | `sqlite` | — | — | ✓ | 2.59 | 3.04 | 2.80 | 3.10 |
 | `ffi-tls` | ✓ | ✓ | — | 2.30 | 2.58 | 2.42 | 2.85 |
-| `ffi-tls-sqlite` | ✓ | ✓ | ✓ | 3.06 | 3.54 | 3.33 | 3.63 |
+| `ffi-tls-sqlite` | ✓ | ✓ | ✓ | 3.06 | 3.54 | 3.33 | 3.64 |
 | upstream `v26.6.0` | ✓ | ✓ | ✓ | *(no asset)* | *(no asset)* | 5.64 | 5.33 |
 
-\* Local macOS arm64 measurements from current `slim`; CI measurements remain pending. Against
-`min` on the same machine, a fib/property/sort/string/Map workload runs 29% faster on `tuned-min`
-for +82 KB and 41% faster on `balanced-min` for +213 KB. `-Oz` and the outliner are Clang-only, so
-on the Linux (GCC) and Windows (MSVC) artifacts the three `min` variants differ only in LTO.
+\* **Byte-identical to `min`.** `-Oz` and the machine outliner are Clang-only, and the Linux
+artifacts are built with GCC while Windows uses MSVC, so `tuned-min` — which is `min` with the
+outliner disabled — has nothing to disable on three of the four platforms. macOS is the only place
+the codegen profiles are distinct binaries.
+
+On macOS arm64, against `min`, a fib/property/sort/string/Map workload runs **29% faster** on
+`tuned-min` for +48 KB and **41% faster** on `balanced-min` for +180 KB. If you care about
+execution speed more than the last 100 KB, those are the two to reach for; if you care about size,
+`min` is still the floor everywhere.
 
 SQLite is the single most expensive optional feature here — up to **+0.95 MiB** over `min`, more
 than TLS and the bundled CA together — which is why it is off in the other four profiles. Only

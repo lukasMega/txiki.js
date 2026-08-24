@@ -97,9 +97,13 @@ const ESBUILD_COMMON = [
 ];
 const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 
-// Smallest-profile sizes, measured per platform from the green dist.yml run on
-// 2026-08-20 at v26.6.0 (24 cells, all suites passing). The balanced-min and
-// tuned-min measurements are added after their first four-platform CI run.
+// Every published profile, measured per platform from the green dist.yml run on
+// 2026-08-24 at slim-v26.6.0-8 (32 cells, all suites passing) by unzipping the
+// release artifacts and stat'ing the binary.
+//
+// tuned-min matching min exactly on linux-x64, linux-arm64 and win32-x64 is not
+// a copy-paste error: -Oz and the machine outliner are Clang-only, and those
+// three legs build with GCC or MSVC, so "min with the outliner off" is min.
 //
 // A single number per profile does not survive contact with four platforms: the
 // spread across them is larger than the spread across profiles. linux-arm64 is
@@ -109,20 +113,24 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // budget would have failed for linux-arm64 the moment --enforce-size was turned on.
 const MEASURED = {
     'linux-x64': {
-        min: 1918920, ffi: 1960328, tls: 2361440,
-        'ffi-tls': 2406944, sqlite: 2717208, 'ffi-tls-sqlite': 3205248,
+        min: 1914824, ffi: 1964424, tls: 2365536,
+        'ffi-tls': 2406944, sqlite: 2717208, 'ffi-tls-sqlite': 3209344,
+        'tuned-min': 1914824, 'balanced-min': 1947800,
     },
     'linux-arm64': {
         min: 2184240, ffi: 2250080, tls: 2708656,
         'ffi-tls': 2708960, sqlite: 3183016, 'ffi-tls-sqlite': 3707736,
+        'tuned-min': 2184240, 'balanced-min': 2250048,
     },
     'darwin-arm64': {
-        min: 2008944, ffi: 2059776, tls: 2489504,
-        'ffi-tls': 2540336, sqlite: 2939056, 'ffi-tls-sqlite': 3486960,
+        min: 2008960, ffi: 2059776, tls: 2506016,
+        'ffi-tls': 2540336, sqlite: 2939072, 'ffi-tls-sqlite': 3486960,
+        'tuned-min': 2057712, 'balanced-min': 2189088,
     },
     'win32-x64': {
-        min: 2421248, ffi: 2486784, tls: 2921472,
-        'ffi-tls': 2985984, sqlite: 3246592, 'ffi-tls-sqlite': 3810816,
+        min: 2421760, ffi: 2486784, tls: 2925056,
+        'ffi-tls': 2990080, sqlite: 3246592, 'ffi-tls-sqlite': 3814400,
+        'tuned-min': 2421760, 'balanced-min': 2437120,
     },
 };
 
