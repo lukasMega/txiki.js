@@ -57,10 +57,20 @@ const PROFILES = {
 // towards -Os/O1 and only the LTO difference survives.
 const OPTIMIZATIONS = [ 'smallest', 'tuned', 'balanced' ];
 
+// The REPL has two halves that must agree -- the run-main bundle define and the
+// CMake option that drops run-repl.c and core.runRepl. One constant drives both
+// so they cannot be flipped independently. See cmake/slim.cmake.
+const REPL = true;
+
 // CLI subcommand gating, applied to the run-main bundle via esbuild --define.
 // esbuild's dead-code elimination then drops the gated-out subcommands.
 function slimDefines(features) {
     return [
+        // Kept on in every published profile: an interactive `tjs` with no REPL
+        // is a surprising thing to ship, and the ~80 KB it costs is the one
+        // saving here that changes what the binary is *for*. Flipping it means
+        // flipping BUILD_WITH_REPL below in the same edit.
+        `--define:__TJS_REPL__=${REPL}`,
         '--define:__TJS_EVAL__=false',
         '--define:__TJS_SERVE__=false',
         '--define:__TJS_BUNDLER__=false',
@@ -686,6 +696,7 @@ function buildTjs() {
         `-DBUILD_WITH_TLS=${features.tls ? 'ON' : 'OFF'}`,
         `-DBUILD_WITH_FFI=${features.ffi ? 'ON' : 'OFF'}`,
         '-DBUILD_WITH_MIMALLOC=OFF',
+        `-DBUILD_WITH_REPL=${REPL ? 'ON' : 'OFF'}`,
         `-DBUILD_WITH_LTO=${balanced ? 'OFF' : 'ON'}`,
         '-DBUILD_WITH_GC_SECTIONS=ON',
         '-DBUILD_WITH_COMPRESSED_BYTECODE=ON',

@@ -21,6 +21,7 @@ All of them live in `cmake/slim.cmake`; `CMakeLists.txt` only includes it.
 | `BUILD_WITH_BUNDLED_CA=OFF` | ON      | Drop the embedded Mozilla CA bundle          | ~105 KB        |
 | `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | ~165 KB        |
 | `BUILD_WITH_MIMALLOC=OFF`   | ON      | Use the system allocator instead of mimalloc | varies         |
+| `BUILD_WITH_REPL=OFF`       | ON      | Remove the interactive REPL                  | ~16.6 KB       |
 
 When TLS is disabled, plain HTTP/WS and TCP/UDP still work, but `https://` / `wss://` requests
 and `TLSSocket`/`TLSServerSocket` throw "TLS not supported in this build"; the Web Crypto API
@@ -39,8 +40,25 @@ intended for size-constrained embedded profiles only; `crypto.getRandomValues()`
 `crypto.randomUUID()` keep working. It also breaks `tjs app pack` and `tjs app compile`, which
 hash the package with `crypto.subtle.digest()`.
 
+`BUILD_WITH_REPL=OFF` removes the interactive REPL. It is the only CLI subcommand with a C
+dimension, so unlike the others it needs **both** halves set together:
+
+```bash
+make js RUN_MAIN_DEFINES="--define:__TJS_REPL__=false --define:__TJS_EVAL__=true \
+  --define:__TJS_SERVE__=true --define:__TJS_BUNDLER__=true --define:__TJS_TEST_RUNNER__=true \
+  --define:__TJS_COMPILE__=true --define:__TJS_APP__=true --define:__TJS_HELP__=true \
+  --define:__TJS_TLS_CA__=true"
+BUILD_WITH_REPL=OFF make
+```
+
+The CMake option alone leaves JS calling a binding that no longer exists; the define alone leaves
+~14 KB of unreachable bytecode linked in. On such a build, running `tjs` with no arguments from a
+terminal reports that the build has no REPL; piping a program to stdin still works, and so does
+every other entry point.
+
 The active set of feature flags is exposed to JS via `tjs.engine.features`: `wasm`, `sqlite`,
-`tls`, `bundledCa`, `webcrypto` and `ffi`.
+`tls`, `bundledCa`, `webcrypto` and `ffi`. The REPL reports through `tjs.engine.cli.repl`
+instead, alongside the other CLI gates.
 
 Unix/macOS example:
 

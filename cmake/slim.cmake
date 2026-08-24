@@ -22,6 +22,12 @@ xoption(BUILD_WITH_BUNDLED_CA "If ON (default, TLS builds only), embed the Mozil
 # (backed by src/mod_os.c, not webcrypto.c). Never default OFF.
 xoption(BUILD_WITH_WEBCRYPTO "If ON (default), build WebCrypto (crypto.subtle). If OFF, drops crypto.subtle (getRandomValues/randomUUID still work) -- LITE profile only, WinterTC-breaking" ON)
 xoption(BUILD_WITH_COMPRESSED_BYTECODE "If ON, compress embedded JS bytecode with miniz (needs tjsc -z)" OFF)
+# The interactive REPL is the only CLI subcommand with a C dimension: its bundle
+# is a real source file and it is reached through a native binding. The other
+# subcommands live entirely in the run-main bundle and are gated by esbuild
+# --define alone. Pair this with `--define:__TJS_REPL__=false` (slim.mk's
+# RUN_MAIN_DEFINES); each half alone is broken -- see the note in slim.mk.
+xoption(BUILD_WITH_REPL "If ON (default), build the interactive REPL" ON)
 # -Oz does strictly more size work than -Os, but is Clang-only. Rewrite only the
 # *_MINSIZEREL flag strings so this is a no-op outside MinSizeRel builds.
 xoption(BUILD_WITH_OZ "If ON, use Clang's -Oz (aggressive size) in MinSizeRel builds" OFF)
@@ -159,6 +165,11 @@ function(tjs_slim_configure_core)
         target_compile_definitions(tjs PRIVATE TJS_HAVE_BUNDLED_CA)
     else()
         _tjs_slim_drop_source(tjs src/cacert.c)
+    endif()
+
+    if(NOT BUILD_WITH_REPL)
+        _tjs_slim_drop_source(tjs src/bundles/c/core/run-repl.c)
+        target_compile_definitions(tjs PRIVATE TJS_NO_REPL)
     endif()
 
     # Embedded JS bytecode is decompressed at load (eval.c/builtins.c) when this is
