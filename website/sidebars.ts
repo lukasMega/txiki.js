@@ -23,7 +23,6 @@ const sidebars: SidebarsConfig = {
         'getting-started',
         'cli',
         'building',
-        'slim-builds',
         'typescript',
       ],
     },

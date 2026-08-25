@@ -268,8 +268,13 @@ all `NOT MSVC`-guarded — they are silently no-ops on an MSVC build.
 `linux-x64` `min`, clang `-Oz` + LTO came out at **1,976,816 B against GCC `-Os` + LTO's
 1,918,920 B — 57,896 B *bigger* (+3.0%)**, and it switches the machine outliner on, so the binary
 is likely slower too. Tried in PR #27 and reverted in #29. The consequence to accept: on Linux and
-on MSVC, `-Oz` never applies, so `tuned-min` and `balanced-min` are byte-identical duplicates of
-`min` there. macOS is the only platform where the three differ.
+on MSVC, `-Oz` never applies, so `tuned-min` is a byte-identical duplicate of `min` there — but
+**only `tuned-min`**. Verified against `slim-v26.6.0-8`'s `SHA256SUMS.txt` (2026-08-24): `min` and
+`tuned-min` share a SHA-256 on both Linux arches, while `balanced-min` differs on every platform
+(linux-x64 1,947,800 B vs `min`'s 1,914,824 B). `BUILD_WITH_QJS_SPEED` raises the engine's `-O`
+level, which is not a Clang-only lever, so it is not a no-op under GCC. MSVC hashes prove nothing
+either way — a PE header embeds a build timestamp, so that output is never reproducible; compare
+the `size:` line in `BUILDINFO.txt` there instead (`min` and `tuned-min`: both 2,421,760 B).
 
 `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
 MinSizeRel flag strings; no-op for other build types and a warning under GCC). `BUILD_WITH_ICF`
@@ -525,6 +530,92 @@ that cannot change what a default `make` produces — docs, `mise.toml`, `benchm
 fork-owned workflows, `cmake/slim.cmake` and `scripts/build-dist.mjs`. It takes a tooling-only PR
 from ~25 minutes of CI to ~8. `slim.mk` is deliberately **not** in the list: `make js` includes it,
 so it can break the `Codegen` job.
+
+## The docs site is published from `slim`, not `master`
+
+`https://lukasmega.github.io/txiki.js-with-slim-builds/`, built by the fork-owned
+`.github/workflows/deploy-docs-slim.yml` on any push to `slim` touching `website/**` or
+`types/**`. Pages is in **Actions mode** (`build_type: workflow`), so no branch is served
+and the orphaned `gh-pages` branch is dead — left in place as a rollback only.
+
+Upstream's `Deploy Docs` is **disabled via the Actions UI**, not deleted: `.github/workflows/**`
+is exactly the path that makes the daily auto-merge chain stand down, so a fork delta there
+converts routine upstream merges into manual ones. A UI toggle is repo state, not a commit.
+
+**No file under `website/` that upstream owns is modified by the docs site.** Both
+`docusaurus.config.ts` and `sidebars.ts` stay byte-identical to upstream; the fork's versions
+(`docusaurus.fork.config.ts`, `sidebars.fork.ts`) import them and override, and the config's
+`sidebarPath` points at the fork sidebar. `sidebars.fork.ts` splices its category in **by
+matching upstream's `'Introduction'` label**, throwing if it is gone, rather than by index.
+
+Every identity override lives in
+**`website/docusaurus.fork.config.ts`**, passed with `docusaurus build --config`: `baseUrl`
+(a project-path Pages URL — with upstream's `/` every asset 404s and the site renders
+unstyled), `editUrl`, the navbar's GitHub/Releases links, and `algolia: undefined`.
+Search is off deliberately — upstream's index is a crawl of `txikijs.org`, so it can never
+contain a fork-only page and every hit navigates off-site.
+
+Spreading the base config is **shallow**: `presets` and `themeConfig` are the very objects
+upstream exported, so each override rebuilds the level it touches. The navbar rewrite matches
+on upstream's `href` and throws if nothing matched, so an upstream reordering can't silently
+retarget the wrong item.
+
+Two traps that cost real debugging:
+
+- **`website/static/CNAME` says `txikijs.org`** and Docusaurus copies `static/` verbatim, so
+  it lands in the Pages artifact and asks GitHub to serve the fork at a domain it does not
+  own. The workflow deletes `website/build/CNAME` after the build (with a `test -f` first, so
+  an upstream move fails the job rather than quietly protecting nothing).
+- **TypeDoc must run before the build.** `sidebars.ts` `require`s `./docs/api/typedoc-sidebar.cjs`
+  inside a `try/catch`, so a missing `generate-api` step yields a *successful* build with the
+  Standard Library section silently empty. The workflow asserts the built API page count.
+
+Five pages are fork-only (`slim-builds`, `downloads`, `size-and-speed`, `testing-slim-builds`,
+`fork-and-ci`), grouped in one category declared in `sidebars.fork.ts`. Each carries a
+`ForkNotice` banner (`website/src/components/ForkNotice/`)
+and a `FORK` sidebar badge via `className: 'fork-only'` styled in `website/src/css/fork.css`
+— which is loaded by appending to the preset's `customCss` **array** in the fork config, so
+`src/css/custom.css` stays upstream's. Note Docusaurus puts a sidebar item's `className` on
+the `<li>`, not the `<a>`: the selector is `.fork-only > .menu__link::after`.
+
+### The two configs share `website/.docusaurus`, and mixing them breaks the dev server
+
+Docusaurus generates into `website/.docusaurus` and neither the config nor the CLI can move
+it, so the fork config and upstream's write to the same directory. Building with one while a
+dev server runs the other leaves a mixed tree, and the failure is loud but misleading:
+
+```
+TypeError: useAlgoliaThemeConfig().algolia is undefined   (in <DocSearch>)
+```
+
+That is a dev server holding the Algolia theme in its module graph — loaded because
+upstream's `themeConfig.algolia` was set when it started — hot-reloading the fork's
+`themeConfig`, which has no `algolia` key. It looks like a browser or config bug and is
+neither. **`docusaurus clear` before switching configs**; both `mise` tasks below do it.
+
+Relatedly, the fork config *deletes* the `algolia` key rather than setting it to `undefined`.
+`preset-classic` gates the theme on `if (themeConfig.algolia)`, so both spellings keep the
+theme out — but a hollow key still satisfies `'algolia' in themeConfig`, which is how
+Docusaurus tests several other fields.
+
+### Preview with `mise run docs:dev`, never `npm start`
+
+Everything fork-only is reachable **only through the fork config**, by design. The trap that
+follows is that `npm start` and `npm run docs` in `website/` use *upstream's* config and fail
+silently-but-visibly: no sidebar badges, no fork sidebar category at all, upstream's navbar
+and Algolia box, and the site served at `/` instead of the Pages path. Nothing errors — it is
+simply not the site that gets published. This has already been mistaken for a browser bug.
+
+```bash
+mise run docs:dev     # dev server, fork config
+mise run docs:build   # build exactly as the workflow does, drop the CNAME, then serve
+```
+
+`ci-docs.yml` deliberately keeps building every docs PR with upstream's config: it validates
+content, and it is upstream-owned. It cannot catch a fork `baseUrl` or sidebar regression —
+`deploy-docs-slim.yml` is what exercises those.
+
+See `.claude/plans/2026-08-25_publish-slim-docs-gh-pages.md`.
 
 ## Required status checks must come from an unfiltered workflow
 

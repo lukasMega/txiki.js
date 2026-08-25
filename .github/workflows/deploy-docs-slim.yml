@@ -1,0 +1,92 @@
+name: Deploy Docs (slim)
+
+# Fork-owned. Upstream's `deploy-docs.yml` builds `master` -- on this fork that is the
+# upstream mirror `sync-upstream.yml` fast-forwards daily, which contains none of the
+# slim docs -- and pushes to a `gh-pages` branch nothing serves. This one builds `slim`
+# with the fork's config and publishes through Actions-mode Pages.
+#
+# `docusaurus.config.ts` stays upstream's; the identity overrides (baseUrl, navbar,
+# search) live in the fork-owned `website/docusaurus.fork.config.ts`.
+
+on:
+  push:
+    branches:
+    - slim
+    paths:
+    - 'website/**'
+    - 'types/**'
+    - '.github/workflows/deploy-docs-slim.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write   # deploy-pages authenticates to Pages over OIDC
+
+# Never cancel a half-finished deploy: Pages would be left serving the partial upload.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: recursive
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: '.nvmrc'
+    # Not `--ignore-scripts`: the root `postinstall` is `npm install --prefix website`,
+    # so that flag would skip every Docusaurus dependency and fail later with a confusing
+    # missing-module error. (auto-merge-pr.yml does use it -- do not copy that line here.)
+    - name: Install dependencies
+      run: npm install
+    # Must run before the build. `sidebars.ts` requires ./docs/api/typedoc-sidebar.cjs
+    # inside a try/catch, so a missing TypeDoc step yields a *successful* build with the
+    # Standard Library section silently empty.
+    - name: Generate the API reference
+      run: npm run generate-api --prefix website
+    # The local bin, not `npx`: if the dependency is somehow missing, npx would go and
+    # fetch a package called `docusaurus` from the registry instead of failing.
+    - name: Build the site
+      working-directory: website
+      run: ./node_modules/.bin/docusaurus build --config ./docusaurus.fork.config.ts
+    # `website/static/CNAME` is upstream's and says `txikijs.org`; Docusaurus copies
+    # static/ verbatim, so it would land in the artifact and ask Pages to serve the fork
+    # at a domain the fork does not own. Removing it here rather than editing the file
+    # keeps `website/static/` byte-identical to upstream. Fail if it ever vanishes --
+    # that means upstream moved it and this step has quietly stopped protecting anything.
+    - name: Drop upstream's CNAME
+      run: |
+        set -euo pipefail
+        test -f website/build/CNAME
+        rm website/build/CNAME
+    # A build that lost TypeDoc still exits 0; fail here instead of publishing it.
+    - name: Check the API reference was included
+      run: |
+        set -euo pipefail
+        count=$(find website/build/docs/api -name 'index.html' | wc -l)
+        echo "API pages built: $count"
+        if [ "$count" -lt 100 ]; then
+          echo "::error::Only $count API pages were built; TypeDoc output looks missing."
+          exit 1
+        fi
+    - uses: actions/upload-pages-artifact@v5
+      with:
+        path: website/build
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - id: deployment
+      uses: actions/deploy-pages@v5
+    - name: Summary
+      run: echo "Deployed to ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
