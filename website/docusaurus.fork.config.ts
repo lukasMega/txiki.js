@@ -52,6 +52,11 @@ const config: Config = {
   url: `https://${ORG.toLowerCase()}.github.io`,
   baseUrl: `/${PROJECT}/`,
 
+  customFields: {
+    ...base.customFields,
+    forkDocs: true,
+  },
+
   organizationName: ORG,
   projectName: PROJECT,
 

@@ -1,44 +1,18 @@
-/* Slim full-width bar, deliberately quieter than an admonition: it is orientation, not a
-   warning, and it appears on every fork-only page. Colours come from Infima variables so
-   light and dark modes both work without a second rule set. */
-
 .banner {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-
   width: 100%;
-  margin: 0 0 1.75rem;
-  padding: 0.65rem 0.9rem;
-
-  border: 1px solid var(--ifm-color-emphasis-300);
-  border-left: 3px solid var(--ifm-color-primary);
-  border-radius: var(--ifm-global-radius);
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
   background: var(--ifm-color-emphasis-100);
-}
-
-.badge {
-  flex: none;
-
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-
-  background: var(--ifm-color-primary);
-  color: var(--ifm-color-primary-contrast-background);
-
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  color: var(--ifm-color-emphasis-800);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .text {
-  flex: 1 1 20rem;
   margin: 0;
+}
 
-  color: var(--ifm-color-emphasis-800);
-  font-size: 0.875rem;
-  line-height: 1.5;
+.text a {
+  font-weight: 600;
 }
