@@ -5,8 +5,9 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "generate-api": "typedoc && node scripts/fix-typedoc-filenames.mjs",
-    "start": "npm run generate-api && docusaurus start",
-    "build": "npm run generate-api && docusaurus build",
+    "generate-slim-metrics": "node scripts/generate-slim-metrics.mjs",
+    "start": "npm run generate-slim-metrics && npm run generate-api && docusaurus start",
+    "build": "npm run generate-slim-metrics && npm run generate-api && docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",

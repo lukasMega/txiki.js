@@ -1,0 +1,176 @@
+.figure {
+  margin: 2rem 0;
+}
+
+.title {
+  color: var(--ifm-heading-color);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.description,
+.provenance {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  margin: 0.35rem 0 0.8rem;
+}
+
+.controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin: 0.75rem 0;
+}
+
+.controls label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.controls select {
+  background: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-400);
+  border-radius: 0.25rem;
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  padding: 0.3rem 0.45rem;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.legendItem {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 0.3rem;
+}
+
+.swatch {
+  background: currentColor;
+  display: inline-block;
+  height: 0.18rem;
+  width: 1rem;
+}
+
+.chart {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  overflow: visible;
+  width: 100%;
+}
+
+.chartScroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.frame {
+  fill: transparent;
+  stroke: var(--ifm-color-emphasis-400);
+}
+
+.grid {
+  stroke: var(--ifm-color-emphasis-300);
+  stroke-width: 1;
+}
+
+.reference {
+  stroke: var(--ifm-font-color-base);
+  stroke-dasharray: 5 4;
+  stroke-width: 1.5;
+}
+
+.axisLabel {
+  fill: var(--ifm-font-color-base);
+  font-size: 12px;
+}
+
+.series polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+}
+
+.series circle {
+  fill: var(--ifm-background-color);
+  stroke: currentColor;
+  stroke-width: 3;
+}
+
+.hoverLine {
+  stroke: var(--ifm-font-color-base);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+}
+
+.tooltip rect {
+  fill: var(--ifm-background-surface-color);
+  stroke: var(--ifm-color-emphasis-500);
+}
+
+.tooltip text {
+  fill: var(--ifm-font-color-base);
+  font-size: 12px;
+}
+
+.bar {
+  fill: currentColor;
+}
+
+.series0 { color: #1769aa; }
+.series1 { color: #c24d00; }
+.series2 { color: #24823d; }
+.series3 { color: #8b44a7; }
+.series4 { color: #b4214b; }
+.series5 { color: #7a6414; }
+
+[data-theme='dark'] .series0 { color: #70b7ff; }
+[data-theme='dark'] .series1 { color: #ff9d5c; }
+[data-theme='dark'] .series2 { color: #72d58a; }
+[data-theme='dark'] .series3 { color: #d49aee; }
+[data-theme='dark'] .series4 { color: #ff82a4; }
+[data-theme='dark'] .series5 { color: #dac45f; }
+
+.dataTable {
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+
+.dataTable summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.dataTable table {
+  display: table;
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.empty {
+  border-left: 3px solid var(--ifm-color-emphasis-400);
+  padding-left: 1rem;
+}
+
+@media (max-width: 480px) {
+  .chart {
+    min-width: 620px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .figure * {
+    scroll-behavior: auto;
+  }
+}

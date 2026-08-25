@@ -21,6 +21,10 @@ the same size trade — they are marked in the table.
 
 ## Optional features
 
+Exact paired measurements and released-profile deltas live in
+[Size and speed](./size-and-speed.md#what-each-feature-costs). Unlike the approximations below,
+those graphs retain platform, release, and build provenance.
+
 | CMake option                | Default | Effect                                       | Approx savings |
 |-----------------------------|---------|----------------------------------------------|----------------|
 | `BUILD_WITH_TLS=OFF`        | ON      | Remove TLS (HTTPS/WSS/TLSSocket)             | ~0.3–0.5 MB    |

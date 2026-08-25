@@ -4,6 +4,9 @@ title: Size and speed
 ---
 
 import ForkNotice from '@site/src/components/ForkNotice';
+import FeatureCostChart from '@site/src/components/SlimMetrics/FeatureCostChart';
+import ReleaseSizeChart from '@site/src/components/SlimMetrics/ReleaseSizeChart';
+import SpeedChart from '@site/src/components/SlimMetrics/SpeedChart';
 
 # Size and speed
 
@@ -23,7 +26,22 @@ Two independent things make a slim binary small, and they are worth keeping apar
 The published profiles combine both. [Downloads](./downloads.md) lists what you can get
 prebuilt; [Slim builds](./slim-builds.md) documents every option.
 
+## Released size history
+
+<ReleaseSizeChart />
+
+The chart reads committed records generated from published ZIP files. It never rebuilds an old tag
+or fetches GitHub while this site is building. `slim-v26.6.0-7` predates two alternative codegen
+profiles, so `balanced-min` and `tuned-min` begin at `slim-v26.6.0-8`; that gap is intentional,
+never zero bytes.
+
 ## What each feature costs
+
+<FeatureCostChart />
+
+Feature costs are paired differences on one platform and release. They are not additive: TLS and
+WebCrypto share mbedTLS, and linker dead-code elimination changes neighboring code. That is why this
+page uses delta bars rather than a Sankey diagram.
 
 Sizes from the `BUILDINFO.txt` inside each published artifact of **`slim-v26.6.0-8`**
 (commit `1274e5e7`, 2026-08-24), **linux-x86_64**, unpacked binary, stripped. The toolchain is
@@ -115,13 +133,17 @@ the same speed on macOS, and identical to `min` on Linux and Windows.
 
 ## Continuous benchmarks
 
+<SpeedChart />
+
 Sizes alone do not tell you whether a slim build is slower at anything that matters, so the
 fork records benchmark runs: startup, resident memory, and a set of throughput workloads,
 on `linux-x86_64` and `macos-arm64`. These run on demand (`workflow_dispatch`) and on PRs that
 touch `benchmarks/**` — not on every release — and history entries are committed by hand,
 because nothing in this fork's automation pushes to `slim`. It compares the full build against `min`,
-`ffi`, `tls` and `ffi-tls` — the SQLite profiles are not benchmarked, since SQLite adds
-bytes rather than changing how the engine runs.
+`ffi`, `tls` and `ffi-tls` in the first recorded run. An `all` dispatch now builds all eight
+published profiles, including SQLite and both codegen variants; pass `release_tag` so every binary
+comes from the exact release commit. SQLite should not change engine throughput, but measuring that
+claim is better than assuming it.
 
 The generated report lives in
 [`benchmarks/README.md`](https://github.com/lukasMega/txiki.js-with-slim-builds/blob/slim/benchmarks/README.md)

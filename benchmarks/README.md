@@ -286,7 +286,9 @@ Only one run recorded on this platform; a trend needs at least two.
 | `min` | `node scripts/build-dist.mjs --profile min` — no FFI, no TLS |
 | `ffi` | `--profile ffi` |
 | `tls` | `--profile tls` |
+| `sqlite` | `--profile sqlite` |
 | `ffi-tls` | `--profile ffi-tls` |
+| `ffi-tls-sqlite` | `--profile ffi-tls-sqlite` |
 
 All binaries come from the **same commit**, so the feature/flag delta is the only variable.
 

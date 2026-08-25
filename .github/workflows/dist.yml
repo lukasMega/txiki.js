@@ -265,6 +265,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -283,6 +287,14 @@ jobs:
             zip -r "${name}.zip" "$dir"
           done
           cat SHA256SUMS.txt
+
+      - name: Build size manifest
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          node scripts/release-size-manifest.mjs collect \
+            --input dist --tag "$RELEASE_TAG" --commit "$GITHUB_SHA" \
+            --out dist/slim-sizes-v1.json
 
       - name: Release notes
         run: |
@@ -338,3 +350,4 @@ jobs:
           files: |
             dist/*.zip
             dist/SHA256SUMS.txt
+            dist/slim-sizes-v1.json

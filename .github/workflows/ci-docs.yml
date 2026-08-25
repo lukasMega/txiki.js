@@ -5,6 +5,10 @@ on:
     paths:
       - 'website/**'
       - 'types/**'
+      - 'benchmarks/history/**'
+      - 'scripts/measure-feature-costs.mjs'
+      - 'scripts/release-size-manifest.mjs'
+      - 'scripts/test/slim-metrics.test.mjs'
 
 jobs:
   docs:
@@ -19,5 +23,9 @@ jobs:
         node-version-file: '.nvmrc'
     - name: Install dependencies
       run: npm install
+    - name: Test slim metrics
+      run: node --test scripts/test/slim-metrics.test.mjs
+    - name: Check slim metrics
+      run: node website/scripts/generate-slim-metrics.mjs --check
     - name: Build the docs
       run: npm run docs

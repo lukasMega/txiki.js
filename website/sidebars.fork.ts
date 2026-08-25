@@ -1,6 +1,8 @@
-import type {SidebarsConfig, SidebarItemConfig} from '@docusaurus/plugin-content-docs';
+import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 import base from './sidebars';
+
+type SidebarItemConfig = Extract<SidebarsConfig[string], unknown[]>[number];
 
 // Fork-only sidebar. `sidebars.ts` is upstream's and is kept byte-identical to it; the
 // fork's pages are spliced in here instead, and docusaurus.fork.config.ts points the
