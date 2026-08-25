@@ -10,7 +10,7 @@ import { report } from './prng.js';
 // (tjs.writeFile / readFile / stat / readDir / makeTempDir). Importing a nonexistent
 // `tjs:` module currently aborts the process with **exit status 0** and no output, so an
 // early draft of this file "passed" while measuring nothing at all. That is the bug the
-// uncommitted upstream PR in .claude/plans/2026-08-19_upstream-pr-silent-module-load.md
+// uncommitted upstream PR in .claude/plans/archive/2026-08-19_upstream-pr-silent-module-load.md
 // fixes; until it lands, treat an empty BENCH output as a failed import, not as no work.
 //
 // Everything happens in a private temp dir removed on every exit path: a benchmark that

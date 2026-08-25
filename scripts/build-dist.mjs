@@ -5,7 +5,7 @@
 // Node so the same code path runs on Linux, macOS and Windows CI runners.
 // `make`/`mise` stay for local development.
 //
-// See .claude/plans/2026-08-08_ci-portable-build-script.md.
+// See .claude/plans/archive/2026-08-08_ci-portable-build-script.md.
 //
 //   node scripts/build-dist.mjs                 # build the current checkout
 //   node scripts/build-dist.mjs --profile tls   # pick a feature set
@@ -127,7 +127,7 @@ const ESBUILD_MINIFY = [ '--minify', '--keep-names' ];
 // A single number per profile does not survive contact with four platforms: the
 // spread across them is larger than the spread across profiles. linux-arm64 is
 // ~265 KB above linux-x64 on the same profile (arm64 PAC/BTI prologues are not
-// free) and MSVC, which compiles six of the eleven size/hardening levers out, is
+// free) and MSVC, which compiles nine of the eleven size/hardening levers out, is
 // another ~240 KB above that. Every one of these numbers on the old flat 2 MiB
 // budget would have failed for linux-arm64 the moment --enforce-size was turned on.
 const MEASURED = {
@@ -689,7 +689,7 @@ function restoreBundles() {
 // Phase 3 -- configure & build tjs
 // ---------------------------------------------------------------------------
 
-// Detect MSVC up front: it silently compiles six of the eleven levers out
+// Detect MSVC up front: it silently compiles nine of the eleven levers out
 // (including BUILD_WITH_HARDENING itself), so the Windows artifact gets an
 // honest profile name rather than a misleading "hardened" one.
 function detectMsvc() {
@@ -839,7 +839,7 @@ const SMOKE_NO_FFI = `
 // unregistered tjs: module currently rejects with QuickJS's uninitialized
 // sentinel rather than an Error, so the catch below proves less than it looks
 // like it does -- see the F9 finding in
-// .claude/plans/2026-08-19_upstream-pr-silent-module-load.md.
+// .claude/plans/archive/2026-08-19_upstream-pr-silent-module-load.md.
 check(tjs.engine.features.ffi === false, 'features.ffi should be false');
 
 let ffiLoaded = true;

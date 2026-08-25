@@ -58,9 +58,9 @@ Two kinds of key:
 
 - **Plain keys** (`wasm`, `sqlite`, `tls`, `bundledCa`, `webcrypto`, `ffi`) are build
   features, read from `tjs.engine.features`.
-- **`cli.`-prefixed keys** (`cli.eval`, `cli.serve`, `cli.bundler`, `cli.testRunner`,
-  `cli.compile`, `cli.app`, `cli.help`, `cli.tlsCa`) are CLI subcommands, read from
-  `tjs.engine.cli`.
+- **`cli.`-prefixed keys** (`cli.repl`, `cli.eval`, `cli.serve`, `cli.bundler`,
+  `cli.testRunner`, `cli.compile`, `cli.app`, `cli.help`, `cli.tlsCa`) are CLI subcommands,
+  read from `tjs.engine.cli`.
 
 Only `*` wildcards at a single position are supported — no `**`, no `?`.
 

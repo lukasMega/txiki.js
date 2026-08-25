@@ -12,7 +12,7 @@ import path from 'tjs:path';
 
 // A sentinel, checked by bench.mjs. A failed static import of a `tjs:` module currently
 // aborts with exit status 0 and no output, so "the process exited 0" does NOT prove the
-// imports resolved -- see .claude/plans/2026-08-19_upstream-pr-silent-module-load.md.
+// imports resolved -- see .claude/plans/archive/2026-08-19_upstream-pr-silent-module-load.md.
 // Without this line a broken workload would be timed as a very fast startup.
 console.log(typeof path.join === 'function' && typeof assert.ok === 'function' && typeof createHash === 'function'
     ? 'READY'

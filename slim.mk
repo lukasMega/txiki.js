@@ -27,7 +27,7 @@ endif
 # CLI subcommand/option gating for the run-main bundle. All default to true
 # (full CLI). The untracked slim.sh wrapper overrides this on the command line
 # (make RUN_MAIN_DEFINES="...") to compile commands out via esbuild dead-code
-# elimination. See .claude/plans/2026-06-17_cli-command-removal.md.
+# elimination. See .claude/plans/archive/2026-06-17_cli-command-removal.md.
 #
 # __TJS_REPL__ is the one entry here with a C half: it must be paired with
 # -DBUILD_WITH_REPL=OFF, which drops run-repl.c and core.runRepl. Setting only
@@ -46,7 +46,7 @@ RUN_MAIN_DEFINES ?= \
 
 # Same dead-code-elimination pattern as RUN_MAIN_DEFINES, applied to the
 # polyfills bundle. All default to true (full build unchanged). See
-# .claude/plans/2026-06-18_binary-size-reduction-3.md (lever L5).
+# .claude/plans/archive/2026-06-18_binary-size-reduction-3.md (lever L5).
 #
 # NOTE: a __TJS_URLPATTERN__ define was tried and dropped -- the
 # urlpattern-polyfill npm package's default entry point has an unconditional

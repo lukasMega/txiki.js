@@ -25,8 +25,10 @@ prebuilt; [Slim builds](./slim-builds.md) documents every option.
 
 ## What each feature costs
 
-Measured on **linux-x86_64, GCC 13.3, `slim-v26.6.0-8` (commit `1274e5e7`, 2026-08-24)**,
-from the `BUILDINFO.txt` inside each published artifact. Unpacked binary, stripped.
+Sizes from the `BUILDINFO.txt` inside each published artifact of **`slim-v26.6.0-8`**
+(commit `1274e5e7`, 2026-08-24), **linux-x86_64**, unpacked binary, stripped. The toolchain is
+whatever `ubuntu-latest` shipped that day — `BUILDINFO.txt` does not record a compiler
+version, so treat the exact GCC release as unpinned.
 
 | profile | binary | vs `min` |
 | --- | ---: | ---: |
@@ -37,8 +39,9 @@ from the `BUILDINFO.txt` inside each published artifact. Unpacked binary, stripp
 | `ffi-tls` | 2,406,944 B | +481 KB |
 | `ffi-tls-sqlite` | 3,209,344 B | +1,264 KB |
 
-For reference, a **default upstream build of the same commit is 8,900,848 B**. The `min`
-profile is `0.22×` of it. Most of that gap is WebAssembly: WAMR is compiled out of every
+For reference, a **default upstream build is 8,900,848 B** — from the benchmark run at
+`slim-v26.6.0-8-4-g709c52a`, four commits later, where `min` measures the same 1,914,824 B.
+The `min` profile is `0.22×` of it. Most of that gap is WebAssembly: WAMR is compiled out of every
 published profile.
 
 TLS is mbedTLS plus the embedded Mozilla CA bundle; SQLite is the amalgamation. Neither is
@@ -68,7 +71,7 @@ Three conclusions, in order of how easy they are to get wrong:
 
 Clang enables its machine outliner by default at `-Oz`. It finds repeated instruction
 sequences and turns them into calls — which is exactly the wrong trade inside QuickJS's
-interpreter dispatch loop. On arm64 it bought **4% of the binary for 30% of the run time**.
+interpreter dispatch loop. On arm64 it bought **4% of the binary for 27% of the run time**.
 
 `BUILD_WITH_NO_OUTLINE=ON` turns it off. Note it is *two* flags, not one: under LTO,
 codegen happens at link, so the compile-time `-mno-outline` is a silent no-op on its own and
@@ -92,28 +95,31 @@ sets `BUILD_WITH_NO_OUTLINE=OFF`.
 
 ### Where the modes are no-ops
 
-`-Oz` is a Clang feature, so on **Linux (GCC)** and **Windows (MSVC)** it never applies —
-the build is already at `-Os`, and `tuned-min` is byte-identical to `min` there. Verified
-against `slim-v26.6.0-8`'s `SHA256SUMS.txt`: same SHA-256 for both Linux architectures.
-`balanced-min` still differs everywhere, since the engine's optimisation level is not a
-Clang-only lever.
+`-Oz` is a Clang feature, so on **Linux (GCC)** and **Windows (MSVC)** it never applies — the
+build is already at `-Os`. Both modes therefore collapse: `tuned` has no outliner to disable,
+and `balanced` re-applies an `-Os` that is already in effect. All three `min` variants are the
+same binary there. Verified for `tuned-min` against `slim-v26.6.0-8`'s `SHA256SUMS.txt`: same
+SHA-256 as `min` on both Linux architectures.
 
 **macOS arm64 is the only platform where all three modes genuinely differ.**
 
 :::warning Numbers ahead of the artifacts
 
 The `balanced` row above is the *current* recipe. `slim-v26.6.0-8` was cut before it landed
-and still ships the previous one (whole binary at `-Os`, LTO off) — on linux-x86_64 that is
-1,947,800 B against `min`'s 1,914,824 B. The next release will carry the newer, smaller
-build at the same speed.
+and still ships the previous one (whole binary at `-Os`, **LTO off**) — on linux-x86_64 that
+is 1,947,800 B against `min`'s 1,914,824 B, a gap that is entirely the missing LTO and says
+nothing about engine optimisation. The next release will carry the newer build: smaller at
+the same speed on macOS, and identical to `min` on Linux and Windows.
 
 :::
 
 ## Continuous benchmarks
 
 Sizes alone do not tell you whether a slim build is slower at anything that matters, so the
-fork records a benchmark run per release: startup, resident memory, and a set of throughput
-workloads, on `linux-x86_64` and `macos-arm64`. It compares the full build against `min`,
+fork records benchmark runs: startup, resident memory, and a set of throughput workloads,
+on `linux-x86_64` and `macos-arm64`. These run on demand (`workflow_dispatch`) and on PRs that
+touch `benchmarks/**` — not on every release — and history entries are committed by hand,
+because nothing in this fork's automation pushes to `slim`. It compares the full build against `min`,
 `ffi`, `tls` and `ffi-tls` — the SQLite profiles are not benchmarked, since SQLite adds
 bytes rather than changing how the engine runs.
 

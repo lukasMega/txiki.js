@@ -26,7 +26,7 @@ pulls it in:
 
 | upstream file | fork delta | fork-owned file |
 | --- | --- | --- |
-| `CMakeLists.txt` | one `include()` + seven call sites | `cmake/slim.cmake` |
+| `CMakeLists.txt` | one `include()` + eight call sites | `cmake/slim.cmake` |
 | `Makefile` | one `-include` | `slim.mk` |
 | `docusaurus.config.ts` | **none** — passed `--config` instead | `website/docusaurus.fork.config.ts` |
 | `ci.yml` | one `paths-ignore` block | `required.yml`, `verify.yml`, `dist.yml` |
@@ -37,7 +37,7 @@ every fork addition in one block at the end.
 CMake is imperative, so that split is not merely cosmetic. The option declarations and
 directory-scoped compile flags have to run at the `include()`, while each
 `tjs_slim_configure_*` function runs at the one point where its target already exists. One
-of the seven is a **macro rather than a function** for the same reason: it overrides plain
+of the eight is a **macro rather than a function** for the same reason: it overrides plain
 directory-scope `WAMR_*` variables, and a function body would set them in its own scope,
 where WAMR would never see them.
 

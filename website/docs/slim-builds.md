@@ -166,5 +166,9 @@ node scripts/build-dist.mjs --profile min --optimization balanced \
 :::warning[Experimental]
 `BUILD_WITH_NO_UNWIND_TABLES=ON` drops the async unwind / `.eh_frame` tables used for crash and
 signal backtraces. C++ exception unwinding still works, but crash backtraces will be unusable.
-It is off by default; verify your signal/error paths before enabling it.
+It is off by default in CMake; verify your signal/error paths before enabling it.
+
+Note the **published binaries do turn it on** — `scripts/build-dist.mjs` passes it for every
+non-MSVC profile. So a downloaded Linux or macOS `tjs` has unusable crash backtraces by
+design. Build from source with it off if you need them.
 :::

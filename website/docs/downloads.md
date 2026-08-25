@@ -20,7 +20,7 @@ same upstream version.
 ## Pick a profile
 
 Every profile is a size/feature trade. Start from the smallest one that has what you need —
-the difference between `min` and `ffi-tls-sqlite` is roughly **2×** in bytes.
+the difference between `min` and `ffi-tls-sqlite` is roughly **1.7×** in bytes.
 
 | profile | FFI | TLS | SQLite | for |
 | --- | :---: | :---: | :---: | --- |
@@ -58,7 +58,8 @@ Identical across all eight, so it is never the thing that decides your choice:
 
 You never have to guess which of these applies to a binary you already have — ask it. Note
 that `tjs eval` is one of the compiled-out subcommands, so the one-liner goes through stdin:
-a binary given a script on stdin runs it, in every profile.
+a binary given a script on stdin runs it, in every profile. (`-e` is still *accepted* by the
+argument parser but never read, so it silently does nothing rather than erroring.)
 
 ```console
 $ echo 'console.log(tjs.engine.features, tjs.engine.cli)' | ./tjs
@@ -76,6 +77,10 @@ ASSET=txiki-slim-min-linux-x86_64.zip
 
 curl -fsSLO "https://github.com/lukasMega/txiki.js-with-slim-builds/releases/download/$VERSION/$ASSET"
 unzip "$ASSET"
+
+# Each zip unpacks into a directory of its own name, holding tjs, BUILDINFO.txt
+# and SHA256SUMS -- there is no bare binary at the top level.
+cd "${ASSET%.zip}"
 chmod +x tjs
 echo 'console.log(tjs.version)' | ./tjs
 ```
@@ -87,6 +92,9 @@ $Asset   = 'txiki-slim-min-windows-x86_64.zip'
 
 Invoke-WebRequest -Uri "https://github.com/lukasMega/txiki.js-with-slim-builds/releases/download/$Version/$Asset" -OutFile $Asset
 Expand-Archive $Asset -DestinationPath .
+
+# The zip unpacks into a directory of its own name.
+Set-Location ($Asset -replace '\.zip$','')
 'console.log(tjs.version)' | .\tjs.exe
 ```
 
@@ -95,12 +103,18 @@ belt-and-braces for archives unpacked by other tools.
 
 ### Verify the download
 
-Each release carries a single combined `SHA256SUMS.txt` covering every asset:
+Each release carries a single combined `SHA256SUMS.txt` covering every asset. Its entries are
+`<profile-platform>/tjs`, matching the directory the zip unpacks into, so run it from the
+**parent** of that directory — not from inside it:
 
 ```bash
+cd ..    # if you followed the install steps above
 curl -fsSLO "https://github.com/lukasMega/txiki.js-with-slim-builds/releases/download/$VERSION/SHA256SUMS.txt"
 sha256sum --check --ignore-missing SHA256SUMS.txt
 ```
+
+`--ignore-missing` is what lets one combined file verify the one profile you actually
+downloaded rather than failing on the other 31.
 
 Every zip also contains a `BUILDINFO.txt` recording the profile, the codegen mode, the
 feature vector, the platform, the binary's size in bytes, its SHA-256, and whether it was
@@ -108,10 +122,11 @@ built with MSVC.
 
 ## The Windows caveat
 
-Windows binaries are built with **MSVC**, where six of the size and hardening options this
-fork adds do not exist. Absent there: `-Oz`, hidden symbol visibility, identical-code
-folding, symbol stripping, reproducible paths, and the hardening set (stack protector,
-zero-init, FORTIFY).
+Windows binaries are built with **MSVC**, where nine of the eleven size and hardening levers
+do not exist. Absent there: `-Oz`, the machine-outliner switch, the per-target QuickJS
+optimisation level, hidden symbol visibility, identical-code folding, symbol stripping,
+dropped unwind tables, reproducible paths, and the hardening set (stack protector,
+zero-init, FORTIFY). Only LTO and dead-code section stripping survive.
 
 Two consequences worth knowing:
 
@@ -119,7 +134,8 @@ Two consequences worth knowing:
    without the `-hardened` suffix its Unix counterparts carry in `BUILDINFO.txt`, so the
    difference is recorded in the artifact rather than only in this page.
 2. **Windows binaries are larger** than the Linux and macOS ones for the same profile, by
-   roughly 25–30%. That is the missing `-Oz` and strip, not extra functionality.
+   roughly 10–27% depending on profile. That is the missing `-Oz` and strip, not extra
+   functionality.
 
 Something similar happens on Linux for a different reason: the Linux jobs use the runner's
 GCC, which has no `-Oz` either. The practical result, verified against the `SHA256SUMS.txt`
@@ -129,10 +145,14 @@ of `slim-v26.6.0-8`:
   `arm64`). Its only effect is disabling Clang's machine outliner, and GCC has none. On
   Windows the two binaries are the same size but hash differently — a PE header embeds a
   build timestamp, so MSVC output is never reproducible and hashes there prove nothing.
-- **`balanced-min` differs on every platform**, because it changes the optimisation level
-  the JS engine is compiled at, which is not a Clang-only lever.
+- **`balanced-min` differs in `slim-v26.6.0-8`**, but only because that release predates the
+  recipe change described below: it was built `-Os` whole-binary with LTO *off*, so on GCC it
+  differs from `min` by the LTO delta. Under the current recipe it collapses onto `min` on
+  Linux and Windows too, since raising the engine to `-Os` is a no-op where the whole build
+  is already `-Os`.
 
-If you are on Linux, `tuned-min` is therefore a strictly redundant download.
+**On Linux and Windows, all three `min` variants end up as the same binary.** macOS arm64 is
+the only platform where the choice is real.
 
 ## Sizes
 

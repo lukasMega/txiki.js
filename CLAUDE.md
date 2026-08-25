@@ -204,7 +204,7 @@ claimed — that figure was the size of the generated C *source* file, not the a
 
 **Every option this fork adds lives in `cmake/slim.cmake`**, not in `CMakeLists.txt` — upstream
 edits `CMakeLists.txt` constantly, so the fork's delta there is deliberately kept to one
-`include()` plus seven `tjs_slim_*()` call sites. CMake is imperative, so the split is not
+`include()` plus eight `tjs_slim_*()` call sites. CMake is imperative, so the split is not
 arbitrary: the option declarations and directory-scoped compile flags run at the `include()`,
 and each `tjs_slim_configure_*` function runs at the one point where its target or dependency
 already exists. Add new fork-only build options there, and call them from the matching function.
@@ -216,7 +216,7 @@ fail outright (`failed to grow memory`; `grow()` returns `-1`), taking `test-was
 and `test-wasm-table.js` with them. Growing is core spec behaviour, so it is not a size trade to
 make. Bisected one setting at a time — the classic interpreter alone is clean.
 
-One of the seven is a **macro, not a function**, and the difference is load-bearing.
+One of the eight is a **macro, not a function**, and the difference is load-bearing.
 `tjs_slim_wasm_options()` overrides plain directory-scope `WAMR_*` variables that upstream sets
 just above it; a function body would set them in its own scope, where WAMR's
 `runtime_lib.cmake` would never see them. `tjs_slim_lws_options()` can stay a function only
@@ -268,13 +268,20 @@ all `NOT MSVC`-guarded — they are silently no-ops on an MSVC build.
 `linux-x64` `min`, clang `-Oz` + LTO came out at **1,976,816 B against GCC `-Os` + LTO's
 1,918,920 B — 57,896 B *bigger* (+3.0%)**, and it switches the machine outliner on, so the binary
 is likely slower too. Tried in PR #27 and reverted in #29. The consequence to accept: on Linux and
-on MSVC, `-Oz` never applies, so `tuned-min` is a byte-identical duplicate of `min` there — but
-**only `tuned-min`**. Verified against `slim-v26.6.0-8`'s `SHA256SUMS.txt` (2026-08-24): `min` and
-`tuned-min` share a SHA-256 on both Linux arches, while `balanced-min` differs on every platform
-(linux-x64 1,947,800 B vs `min`'s 1,914,824 B). `BUILD_WITH_QJS_SPEED` raises the engine's `-O`
-level, which is not a Clang-only lever, so it is not a no-op under GCC. MSVC hashes prove nothing
-either way — a PE header embeds a build timestamp, so that output is never reproducible; compare
-the `size:` line in `BUILDINFO.txt` there instead (`min` and `tuned-min`: both 2,421,760 B).
+on MSVC, `-Oz` never applies, so `tuned-min` and `balanced-min` are byte-identical duplicates of
+`min` there. macOS is the only platform where the three differ.
+
+Two things to know before checking that against a published artifact. **`tuned-min` is already
+verifiable**: in `slim-v26.6.0-8` it shares a SHA-256 with `min` on both Linux arches. **`balanced-min`
+is not yet** — that release predates PR #32, so its `balanced-min` was built with the old recipe
+(`-Os` whole-binary, `BUILD_WITH_LTO=OFF`), and on GCC it therefore differs from `min` by the whole
+LTO delta: 1,947,800 B against 1,914,824 B. From the next release it collapses onto `min` like
+`tuned-min` does, because `BUILD_WITH_QJS_SPEED` only appends `-Os` to the `qjs` target and GCC's
+`MinSizeRel` is already `-Os`. Do not read that release's sizes as evidence about the current recipe.
+
+MSVC hashes prove nothing either way — a PE header embeds a build timestamp, so that output is never
+reproducible; compare the `size:` line in `BUILDINFO.txt` there instead (`min` and `tuned-min`: both
+2,421,760 B).
 
 `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
 MinSizeRel flag strings; no-op for other build types and a warning under GCC). `BUILD_WITH_ICF`
@@ -363,8 +370,8 @@ normal build.
 
 The `feature-skip.json` mechanism described above also gates tests that spawn a CLI subcommand
 which slim builds compile out. The entry point publishes its esbuild `--define` gating as its own
-frozen `tjs.engine.cli` — `eval`, `serve`, `bundler`, `testRunner`, `compile`, `app`, `help`,
-`tlsCa` — and `feature-skip.json` keys on those under a `cli.` prefix (`"cli.eval"`,
+frozen `tjs.engine.cli` — `repl`, `eval`, `serve`, `bundler`, `testRunner`, `compile`, `app`,
+`help`, `tlsCa` — and `feature-skip.json` keys on those under a `cli.` prefix (`"cli.eval"`,
 `"cli.bundler"`, …) alongside the plain CMake feature keys. Prefer splitting a test that only
 *partly* needs a gated subcommand (see `test-cli-help.js` vs `test-cli-version.js`) over skipping
 the whole file.
@@ -472,7 +479,7 @@ reimplements the bundle pipeline in Node rather than using `make`, because the M
 GNU-make with POSIX-shell recipes and cannot run on a Windows runner. `make`/`mise` remain the
 local-development path. Its output is byte-identical to
 `make -B core stdlib RUN_MAIN_DEFINES="…" TJSC_COMPRESS=-z`; keep it that way when changing
-either side. On MSVC six of the size/hardening levers are compiled out, so the Windows artifact
+either side. On MSVC nine of the eleven size/hardening levers are compiled out, so the Windows artifact
 is deliberately built and named as a different, non-hardened profile.
 
 Two workflows gate the slim builds, both running the *shipped* binary through the whole suite:
