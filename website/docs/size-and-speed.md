@@ -103,7 +103,7 @@ SHA-256 as `min` on both Linux architectures.
 
 **macOS arm64 is the only platform where all three modes genuinely differ.**
 
-:::warning Numbers ahead of the artifacts
+:::warning[Numbers ahead of the artifacts]
 
 The `balanced` row above is the *current* recipe. `slim-v26.6.0-8` was cut before it landed
 and still ships the previous one (whole binary at `-Os`, **LTO off**) — on linux-x86_64 that
