@@ -14,19 +14,28 @@ This fork adds build-time options on top of the ones documented in
 (smaller binary, smaller API surface) and options that only change **how the code is compiled
 and linked** (smaller binary, same features).
 
-All of them live in `cmake/slim.cmake`; `CMakeLists.txt` only includes it.
+The options this fork adds live in `cmake/slim.cmake`; `CMakeLists.txt` carries only an
+`include()` and eight `tjs_slim_*()` call sites. Two entries below (`BUILD_WITH_FFI` and
+`BUILD_WITH_MIMALLOC`) are **upstream's own** options, listed here because they are part of
+the same size trade — they are marked in the table.
 
 ## Optional features
 
 | CMake option                | Default | Effect                                       | Approx savings |
 |-----------------------------|---------|----------------------------------------------|----------------|
 | `BUILD_WITH_TLS=OFF`        | ON      | Remove TLS (HTTPS/WSS/TLSSocket)             | ~0.3–0.5 MB    |
-| `BUILD_WITH_FFI=OFF`        | ON      | Remove libffi and the `tjs:ffi` module       | ~50 KB         |
+| `BUILD_WITH_FFI=OFF` *(upstream)* | ON | Remove libffi and the `tjs:ffi` module   | ~50 KB         |
 | `BUILD_WITH_BUNDLED_CA=OFF` | ON      | Drop the embedded Mozilla CA bundle          | ~105 KB        |
-| `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | ~165 KB        |
-| `BUILD_WITH_MIMALLOC=OFF`   | ON      | Use the system allocator instead of mimalloc | varies         |
+| `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | ~178 KiB       |
+| `BUILD_WITH_MIMALLOC=OFF` *(upstream)* | ON | Use the system allocator instead of mimalloc | varies |
 | `BUILD_WITH_REPL=OFF`       | ON      | Remove the interactive REPL                  | ~16.6 KB       |
 | `BUILD_WITH_WASM_FULL=OFF`  | ON      | WAMR classic interpreter, no SIMD            | ~65 KB         |
+
+The `BUILD_WITH_WEBCRYPTO` figure was measured 2026-08-25 on macOS arm64 (Apple clang 21),
+MinSizeRel + `-Oz` + LTO + ICF + strip + hardening, two builds differing in that one flag:
+2,240,304 B against 2,057,744 B, a **182,560 B (178.3 KiB)** saving. The `~165 KB` this table
+carried before was the `__TEXT` segment delta alone (163,840 B), which omits `__DATA_CONST` —
+the same text-segment-vs-binary-size mistake as the retired `~80 KB` REPL figure.
 
 When TLS is disabled, plain HTTP/WS and TCP/UDP still work, but `https://` / `wss://` requests
 and `TLSSocket`/`TLSServerSocket` throw "TLS not supported in this build"; the Web Crypto API

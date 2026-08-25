@@ -31,8 +31,10 @@ endif
 #
 # __TJS_REPL__ is the one entry here with a C half: it must be paired with
 # -DBUILD_WITH_REPL=OFF, which drops run-repl.c and core.runRepl. Setting only
-# this one leaves ~80 KB of unreachable REPL bytecode in the binary; setting
+# this one leaves ~14 KB of unreachable REPL bytecode in the binary; setting
 # only the CMake one leaves JS calling a function that no longer exists.
+# (~16.6 KB total once the binding and dispatch branch go too. An older plan
+# said ~80 KB -- that was the size of the generated C source, not the array.)
 RUN_MAIN_DEFINES ?= \
 	--define:__TJS_REPL__=true \
 	--define:__TJS_EVAL__=true \

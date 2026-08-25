@@ -78,7 +78,7 @@ const REPL = true;
 function slimDefines(features) {
     return [
         // Kept on in every published profile: an interactive `tjs` with no REPL
-        // is a surprising thing to ship, and the ~80 KB it costs is the one
+        // is a surprising thing to ship, and the ~16.6 KB it costs is the one
         // saving here that changes what the binary is *for*. Flipping it means
         // flipping BUILD_WITH_REPL below in the same edit.
         `--define:__TJS_REPL__=${REPL}`,
