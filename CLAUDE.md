@@ -178,8 +178,11 @@ BUILD_WITH_BUNDLED_CA=OFF make  # (TLS builds only) Drop the embedded Mozilla CA
 BUILD_WITH_WEBCRYPTO=OFF make   # LITE profile only, WinterTC-breaking: drops crypto.subtle
                                  # (crypto.getRandomValues/randomUUID still work). Also breaks
                                  # `tjs app pack`/`tjs app compile`, which hash the package via
-                                 # crypto.subtle.digest.
-BUILD_WITH_FFI=OFF make         # Disable libffi (drops the tjs:ffi module)
+                                 # crypto.subtle.digest. Saves 182,560 B (178.3 KiB), measured
+                                 # 2026-08-25 on macOS arm64. No published profile sets it.
+BUILD_WITH_FFI=OFF make         # UPSTREAM'S OPTION, not this fork's -- it lives in
+                                 # CMakeLists.txt, not cmake/slim.cmake. Listed here only
+                                 # because it is part of the same size trade.
 BUILD_WITH_REPL=OFF make        # Drop the interactive REPL. MUST be paired with
                                  # `make js RUN_MAIN_DEFINES="… __TJS_REPL__=false …"`
 BUILD_WITH_WASM_FULL=OFF make   # (WASM builds only) WAMR classic interp + no SIMD:
