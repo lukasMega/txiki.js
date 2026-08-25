@@ -204,7 +204,7 @@ claimed — that figure was the size of the generated C *source* file, not the a
 
 **Every option this fork adds lives in `cmake/slim.cmake`**, not in `CMakeLists.txt` — upstream
 edits `CMakeLists.txt` constantly, so the fork's delta there is deliberately kept to one
-`include()` plus seven `tjs_slim_*()` call sites. CMake is imperative, so the split is not
+`include()` plus eight `tjs_slim_*()` call sites. CMake is imperative, so the split is not
 arbitrary: the option declarations and directory-scoped compile flags run at the `include()`,
 and each `tjs_slim_configure_*` function runs at the one point where its target or dependency
 already exists. Add new fork-only build options there, and call them from the matching function.
@@ -216,7 +216,7 @@ fail outright (`failed to grow memory`; `grow()` returns `-1`), taking `test-was
 and `test-wasm-table.js` with them. Growing is core spec behaviour, so it is not a size trade to
 make. Bisected one setting at a time — the classic interpreter alone is clean.
 
-One of the seven is a **macro, not a function**, and the difference is load-bearing.
+One of the eight is a **macro, not a function**, and the difference is load-bearing.
 `tjs_slim_wasm_options()` overrides plain directory-scope `WAMR_*` variables that upstream sets
 just above it; a function body would set them in its own scope, where WAMR's
 `runtime_lib.cmake` would never see them. `tjs_slim_lws_options()` can stay a function only
@@ -270,6 +270,18 @@ all `NOT MSVC`-guarded — they are silently no-ops on an MSVC build.
 is likely slower too. Tried in PR #27 and reverted in #29. The consequence to accept: on Linux and
 on MSVC, `-Oz` never applies, so `tuned-min` and `balanced-min` are byte-identical duplicates of
 `min` there. macOS is the only platform where the three differ.
+
+Two things to know before checking that against a published artifact. **`tuned-min` is already
+verifiable**: in `slim-v26.6.0-8` it shares a SHA-256 with `min` on both Linux arches. **`balanced-min`
+is not yet** — that release predates PR #32, so its `balanced-min` was built with the old recipe
+(`-Os` whole-binary, `BUILD_WITH_LTO=OFF`), and on GCC it therefore differs from `min` by the whole
+LTO delta: 1,947,800 B against 1,914,824 B. From the next release it collapses onto `min` like
+`tuned-min` does, because `BUILD_WITH_QJS_SPEED` only appends `-Os` to the `qjs` target and GCC's
+`MinSizeRel` is already `-Os`. Do not read that release's sizes as evidence about the current recipe.
+
+MSVC hashes prove nothing either way — a PE header embeds a build timestamp, so that output is never
+reproducible; compare the `size:` line in `BUILDINFO.txt` there instead (`min` and `tuned-min`: both
+2,421,760 B).
 
 `BUILD_WITH_OZ` requires Clang and only affects `MinSizeRel` (it rewrites `-Os` to `-Oz` in the
 MinSizeRel flag strings; no-op for other build types and a warning under GCC). `BUILD_WITH_ICF`
@@ -358,8 +370,8 @@ normal build.
 
 The `feature-skip.json` mechanism described above also gates tests that spawn a CLI subcommand
 which slim builds compile out. The entry point publishes its esbuild `--define` gating as its own
-frozen `tjs.engine.cli` — `eval`, `serve`, `bundler`, `testRunner`, `compile`, `app`, `help`,
-`tlsCa` — and `feature-skip.json` keys on those under a `cli.` prefix (`"cli.eval"`,
+frozen `tjs.engine.cli` — `repl`, `eval`, `serve`, `bundler`, `testRunner`, `compile`, `app`,
+`help`, `tlsCa` — and `feature-skip.json` keys on those under a `cli.` prefix (`"cli.eval"`,
 `"cli.bundler"`, …) alongside the plain CMake feature keys. Prefer splitting a test that only
 *partly* needs a gated subcommand (see `test-cli-help.js` vs `test-cli-version.js`) over skipping
 the whole file.
@@ -467,7 +479,7 @@ reimplements the bundle pipeline in Node rather than using `make`, because the M
 GNU-make with POSIX-shell recipes and cannot run on a Windows runner. `make`/`mise` remain the
 local-development path. Its output is byte-identical to
 `make -B core stdlib RUN_MAIN_DEFINES="…" TJSC_COMPRESS=-z`; keep it that way when changing
-either side. On MSVC six of the size/hardening levers are compiled out, so the Windows artifact
+either side. On MSVC nine of the eleven size/hardening levers are compiled out, so the Windows artifact
 is deliberately built and named as a different, non-hardened profile.
 
 Two workflows gate the slim builds, both running the *shipped* binary through the whole suite:
@@ -525,6 +537,92 @@ that cannot change what a default `make` produces — docs, `mise.toml`, `benchm
 fork-owned workflows, `cmake/slim.cmake` and `scripts/build-dist.mjs`. It takes a tooling-only PR
 from ~25 minutes of CI to ~8. `slim.mk` is deliberately **not** in the list: `make js` includes it,
 so it can break the `Codegen` job.
+
+## The docs site is published from `slim`, not `master`
+
+`https://lukasmega.github.io/txiki.js-with-slim-builds/`, built by the fork-owned
+`.github/workflows/deploy-docs-slim.yml` on any push to `slim` touching `website/**` or
+`types/**`. Pages is in **Actions mode** (`build_type: workflow`), so no branch is served
+and the orphaned `gh-pages` branch is dead — left in place as a rollback only.
+
+Upstream's `Deploy Docs` is **disabled via the Actions UI**, not deleted: `.github/workflows/**`
+is exactly the path that makes the daily auto-merge chain stand down, so a fork delta there
+converts routine upstream merges into manual ones. A UI toggle is repo state, not a commit.
+
+**No file under `website/` that upstream owns is modified by the docs site.** Both
+`docusaurus.config.ts` and `sidebars.ts` stay byte-identical to upstream; the fork's versions
+(`docusaurus.fork.config.ts`, `sidebars.fork.ts`) import them and override, and the config's
+`sidebarPath` points at the fork sidebar. `sidebars.fork.ts` splices its category in **by
+matching upstream's `'Introduction'` label**, throwing if it is gone, rather than by index.
+
+Every identity override lives in
+**`website/docusaurus.fork.config.ts`**, passed with `docusaurus build --config`: `baseUrl`
+(a project-path Pages URL — with upstream's `/` every asset 404s and the site renders
+unstyled), `editUrl`, the navbar's GitHub/Releases links, and `algolia: undefined`.
+Search is off deliberately — upstream's index is a crawl of `txikijs.org`, so it can never
+contain a fork-only page and every hit navigates off-site.
+
+Spreading the base config is **shallow**: `presets` and `themeConfig` are the very objects
+upstream exported, so each override rebuilds the level it touches. The navbar rewrite matches
+on upstream's `href` and throws if nothing matched, so an upstream reordering can't silently
+retarget the wrong item.
+
+Two traps that cost real debugging:
+
+- **`website/static/CNAME` says `txikijs.org`** and Docusaurus copies `static/` verbatim, so
+  it lands in the Pages artifact and asks GitHub to serve the fork at a domain it does not
+  own. The workflow deletes `website/build/CNAME` after the build (with a `test -f` first, so
+  an upstream move fails the job rather than quietly protecting nothing).
+- **TypeDoc must run before the build.** `sidebars.ts` `require`s `./docs/api/typedoc-sidebar.cjs`
+  inside a `try/catch`, so a missing `generate-api` step yields a *successful* build with the
+  Standard Library section silently empty. The workflow asserts the built API page count.
+
+Five pages are fork-only (`slim-builds`, `downloads`, `size-and-speed`, `testing-slim-builds`,
+`fork-and-ci`), grouped in one category declared in `sidebars.fork.ts`. Each carries a
+`ForkNotice` banner (`website/src/components/ForkNotice/`)
+and a `FORK` sidebar badge via `className: 'fork-only'` styled in `website/src/css/fork.css`
+— which is loaded by appending to the preset's `customCss` **array** in the fork config, so
+`src/css/custom.css` stays upstream's. Note Docusaurus puts a sidebar item's `className` on
+the `<li>`, not the `<a>`: the selector is `.fork-only > .menu__link::after`.
+
+### The two configs share `website/.docusaurus`, and mixing them breaks the dev server
+
+Docusaurus generates into `website/.docusaurus` and neither the config nor the CLI can move
+it, so the fork config and upstream's write to the same directory. Building with one while a
+dev server runs the other leaves a mixed tree, and the failure is loud but misleading:
+
+```
+TypeError: useAlgoliaThemeConfig().algolia is undefined   (in <DocSearch>)
+```
+
+That is a dev server holding the Algolia theme in its module graph — loaded because
+upstream's `themeConfig.algolia` was set when it started — hot-reloading the fork's
+`themeConfig`, which has no `algolia` key. It looks like a browser or config bug and is
+neither. **`docusaurus clear` before switching configs**; both `mise` tasks below do it.
+
+Relatedly, the fork config *deletes* the `algolia` key rather than setting it to `undefined`.
+`preset-classic` gates the theme on `if (themeConfig.algolia)`, so both spellings keep the
+theme out — but a hollow key still satisfies `'algolia' in themeConfig`, which is how
+Docusaurus tests several other fields.
+
+### Preview with `mise run docs:dev`, never `npm start`
+
+Everything fork-only is reachable **only through the fork config**, by design. The trap that
+follows is that `npm start` and `npm run docs` in `website/` use *upstream's* config and fail
+silently-but-visibly: no sidebar badges, no fork sidebar category at all, upstream's navbar
+and Algolia box, and the site served at `/` instead of the Pages path. Nothing errors — it is
+simply not the site that gets published. This has already been mistaken for a browser bug.
+
+```bash
+mise run docs:dev     # dev server, fork config
+mise run docs:build   # build exactly as the workflow does, drop the CNAME, then serve
+```
+
+`ci-docs.yml` deliberately keeps building every docs PR with upstream's config: it validates
+content, and it is upstream-owned. It cannot catch a fork `baseUrl` or sidebar regression —
+`deploy-docs-slim.yml` is what exercises those.
+
+See `.claude/plans/2026-08-25_publish-slim-docs-gh-pages.md`.
 
 ## Required status checks must come from an unfiltered workflow
 

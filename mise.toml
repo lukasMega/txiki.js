@@ -378,7 +378,7 @@ description = "Run the full suite against a dist artifact, e.g. `mise run test:d
 run = 'TJS_TEST_EXE=$(pwd)/dist/{{arg(name="profile", default="ffi")}}/tjs ./build/tjs test tests/'
 
 # ---------------------------------------------------------------------------
-# Upstream sync. See .claude/plans/2026-08-19_fork-upstream-sync-reliability.md.
+# Upstream sync. See .claude/plans/archive/2026-08-19_fork-upstream-sync-reliability.md.
 # ---------------------------------------------------------------------------
 
 # Merge cadence is weekly, unconditionally: the cost of a merge is superlinear
@@ -479,4 +479,45 @@ sh scripts/update-ca-bundle.sh
 after=$(count src/cacert.c)
 echo "certificates: $before -> $after (delta $((after - before)))"
 git diff --stat -- src/cacert.c
+"""
+
+# ---------------------------------------------------------------------------
+# Docs site. See the "docs site is published from `slim`" section of CLAUDE.md.
+# ---------------------------------------------------------------------------
+
+# Always go through these rather than `npm start` / `npm run docs` in website/.
+# Those use upstream's docusaurus.config.ts, which has upstream's baseUrl, upstream's
+# navbar, upstream's Algolia index and no fork stylesheet -- so the fork's pages render
+# without their sidebar badges and the site is served at `/` instead of the Pages path.
+# Nothing errors; it just quietly is not the site that gets published.
+[tasks."docs:dev"]
+description = "Run the docs dev server with the fork config (the one that gets published)"
+run = """
+set -eu
+npm install
+npm run generate-api --prefix website
+cd website
+# Both configs generate into the same website/.docusaurus, and neither Docusaurus nor its
+# CLI lets you move that. Switching configs without clearing leaves a mixed tree: the
+# symptom seen in practice is a live dev server picking up the fork's themeConfig (no
+# `algolia` key) while the Algolia theme is still in its module graph, which crashes
+# <DocSearch> with "useAlgoliaThemeConfig().algolia is undefined". Clearing is cheap.
+./node_modules/.bin/docusaurus clear
+./node_modules/.bin/docusaurus start --config ./docusaurus.fork.config.ts
+"""
+
+[tasks."docs:build"]
+description = "Build the docs exactly as deploy-docs-slim.yml does, then serve them"
+run = """
+set -eu
+npm install
+npm run generate-api --prefix website
+cd website
+# See docs:dev -- the two configs share website/.docusaurus and must not be mixed.
+./node_modules/.bin/docusaurus clear
+./node_modules/.bin/docusaurus build --config ./docusaurus.fork.config.ts
+# The workflow drops this before uploading: it is upstream's txikijs.org CNAME, and
+# publishing it would point the fork's Pages at a domain it does not own.
+rm -f build/CNAME
+./node_modules/.bin/docusaurus serve --config ./docusaurus.fork.config.ts
 """

@@ -23,6 +23,7 @@ on:
       - 'scripts/build-dist.mjs'
       - '.github/workflows/dist.yml'
       - '.github/workflows/verify.yml'
+      - '.github/workflows/deploy-docs-slim.yml'
       - '.github/workflows/auto-merge-pr.yml'
       - '.github/workflows/merge-check.yml'
       - '.github/workflows/sync-upstream.yml'

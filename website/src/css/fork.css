@@ -1,0 +1,32 @@
+/* Fork-only global styles. Loaded by appending this file to the preset's `customCss`
+   array in docusaurus.fork.config.ts, so `src/css/custom.css` stays upstream's.
+
+   Under upstream's config this file is simply not loaded: the `fork-only` class still
+   appears in the sidebar markup but renders nothing, which is the correct behaviour. */
+
+/* Marks a sidebar entry whose page exists only in this fork. The badge is a pseudo-element
+   so the sidebar item stays a plain link -- no swizzled theme component to keep in sync
+   with Docusaurus, and nothing extra in the accessibility tree that the page's own
+   "only on this fork" banner does not already say. */
+/* Docusaurus puts a sidebar item's `className` on the <li>, not on the <a> inside it. */
+.fork-only > .menu__link::after {
+  content: 'fork';
+
+  margin-left: auto;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-700);
+
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The active item inverts its background, so the neutral grey above would vanish into it. */
+.fork-only > .menu__link--active::after {
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-primary-contrast-background);
+}
