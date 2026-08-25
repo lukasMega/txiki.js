@@ -20,11 +20,15 @@ on:
   workflow_dispatch:
     inputs:
       profiles:
-        description: 'Which binaries to measure: extremes (full+min+ffi-tls) or all'
+        description: 'Which binaries to measure: extremes or all eight released profiles'
         required: false
         default: extremes
         type: choice
         options: [ extremes, all ]
+      release_tag:
+        description: 'Exact release tag to benchmark (for example slim-v26.6.0-9)'
+        required: false
+        type: string
   pull_request:
     paths:
       - 'benchmarks/**'
@@ -53,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_tag || github.ref }}
           submodules: recursive
           # History entries are keyed by `git describe --tags`, and at the
           # default depth of 1 there are no tags to describe against -- the
@@ -90,15 +95,23 @@ jobs:
         run: |
           set -eu
           if [ '${{ inputs.profiles }}' = 'all' ]; then
-            profiles='min ffi tls ffi-tls'
+            specs='min:smallest ffi:smallest tls:smallest sqlite:smallest ffi-tls:smallest ffi-tls-sqlite:smallest min:tuned min:balanced'
           else
-            profiles='min ffi-tls'
+            specs='min:smallest ffi-tls:smallest'
           fi
-          for p in $profiles; do
+          for spec in $specs; do
+            p="${spec%%:*}"
+            optimization="${spec#*:}"
+            if [ "$optimization" = smallest ]; then
+              id="$p"
+            else
+              id="$optimization-$p"
+            fi
             node scripts/build-dist.mjs --profile "$p" \
-              --build-dir "build-bench-$p" --out "dist/$p"
+              --optimization "$optimization" \
+              --build-dir "build-bench-$id" --out "dist/$id"
             if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-              echo "::error::$p left the tree dirty; src/bundles was not restored"
+              echo "::error::$id left the tree dirty; src/bundles was not restored"
               git status --porcelain --untracked-files=no
               exit 1
             fi

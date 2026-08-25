@@ -1,0 +1,960 @@
+{
+  "schemaVersion": 1,
+  "releaseSizes": {
+    "platforms": [
+      "linux-x86_64",
+      "linux-arm64",
+      "macos-arm64",
+      "windows-x86_64"
+    ],
+    "profiles": [
+      "balanced-min",
+      "tuned-min",
+      "min",
+      "ffi",
+      "tls",
+      "sqlite",
+      "ffi-tls",
+      "ffi-tls-sqlite"
+    ],
+    "releases": [
+      {
+        "tag": "slim-v26.6.0-7",
+        "commit": "a0f95ee8d9e36a53e4b3cbd06ff00efef1cbaf95",
+        "publishedAt": "2026-08-20T20:22:06.000Z",
+        "complete": false,
+        "artifacts": [
+          {
+            "platform": "linux-x86_64",
+            "profile": "min",
+            "raw": 1918920,
+            "archive": 1027742
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "ffi",
+            "raw": 1960328,
+            "archive": 1058807
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "tls",
+            "raw": 2361440,
+            "archive": 1307414
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "sqlite",
+            "raw": 2717208,
+            "archive": 1484915
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "ffi-tls",
+            "raw": 2406944,
+            "archive": 1339562
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3205248,
+            "archive": 1798225
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "min",
+            "raw": 2184240,
+            "archive": 1102513
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "ffi",
+            "raw": 2250080,
+            "archive": 1135737
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "tls",
+            "raw": 2708656,
+            "archive": 1396270
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "sqlite",
+            "raw": 3183016,
+            "archive": 1618990
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "ffi-tls",
+            "raw": 2708960,
+            "archive": 1429461
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3707736,
+            "archive": 1949449
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "min",
+            "raw": 2008944,
+            "archive": 1067231
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "ffi",
+            "raw": 2059776,
+            "archive": 1100712
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "tls",
+            "raw": 2489504,
+            "archive": 1358329
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "sqlite",
+            "raw": 2939056,
+            "archive": 1574951
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "ffi-tls",
+            "raw": 2540336,
+            "archive": 1390188
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3486960,
+            "archive": 1896504
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "min",
+            "raw": 2421248,
+            "archive": 1309753
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "ffi",
+            "raw": 2486784,
+            "archive": 1353494
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "tls",
+            "raw": 2921472,
+            "archive": 1614892
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "sqlite",
+            "raw": 3246592,
+            "archive": 1793911
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "ffi-tls",
+            "raw": 2985984,
+            "archive": 1659130
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3810816,
+            "archive": 2142837
+          }
+        ]
+      },
+      {
+        "tag": "slim-v26.6.0-8",
+        "commit": "1274e5e72eb30993eecf5df19ab155f080840372",
+        "publishedAt": "2026-08-24T16:15:13.000Z",
+        "complete": true,
+        "artifacts": [
+          {
+            "platform": "linux-x86_64",
+            "profile": "balanced-min",
+            "raw": 1947800,
+            "archive": 1034638
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "tuned-min",
+            "raw": 1914824,
+            "archive": 1029375
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "min",
+            "raw": 1914824,
+            "archive": 1029330
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "ffi",
+            "raw": 1964424,
+            "archive": 1059782
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "tls",
+            "raw": 2365536,
+            "archive": 1309318
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "sqlite",
+            "raw": 2717208,
+            "archive": 1486750
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "ffi-tls",
+            "raw": 2406944,
+            "archive": 1340199
+          },
+          {
+            "platform": "linux-x86_64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3209344,
+            "archive": 1799856
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "balanced-min",
+            "raw": 2250048,
+            "archive": 1117128
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "tuned-min",
+            "raw": 2184240,
+            "archive": 1101503
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "min",
+            "raw": 2184240,
+            "archive": 1101458
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "ffi",
+            "raw": 2250080,
+            "archive": 1134380
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "tls",
+            "raw": 2708656,
+            "archive": 1396783
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "sqlite",
+            "raw": 3183016,
+            "archive": 1619174
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "ffi-tls",
+            "raw": 2708960,
+            "archive": 1430857
+          },
+          {
+            "platform": "linux-arm64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3707736,
+            "archive": 1950459
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "balanced-min",
+            "raw": 2189088,
+            "archive": 1106412
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "tuned-min",
+            "raw": 2057712,
+            "archive": 1048052
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "min",
+            "raw": 2008960,
+            "archive": 1067013
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "ffi",
+            "raw": 2059776,
+            "archive": 1099476
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "tls",
+            "raw": 2506016,
+            "archive": 1360588
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "sqlite",
+            "raw": 2939072,
+            "archive": 1574623
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "ffi-tls",
+            "raw": 2540336,
+            "archive": 1392141
+          },
+          {
+            "platform": "macos-arm64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3486960,
+            "archive": 1898460
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "balanced-min",
+            "raw": 2437120,
+            "archive": 1317728
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "tuned-min",
+            "raw": 2421760,
+            "archive": 1308575
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "min",
+            "raw": 2421760,
+            "archive": 1308530
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "ffi",
+            "raw": 2486784,
+            "archive": 1352997
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "tls",
+            "raw": 2925056,
+            "archive": 1615536
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "sqlite",
+            "raw": 3246592,
+            "archive": 1794036
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "ffi-tls",
+            "raw": 2990080,
+            "archive": 1661336
+          },
+          {
+            "platform": "windows-x86_64",
+            "profile": "ffi-tls-sqlite",
+            "raw": 3814400,
+            "archive": 2144560
+          }
+        ]
+      }
+    ]
+  },
+  "featureCosts": {
+    "catalog": [
+      {
+        "id": "wasm",
+        "label": "WebAssembly",
+        "category": "runtime",
+        "setting": "BUILD_WITH_WASM=OFF",
+        "measured": false
+      },
+      {
+        "id": "sqlite",
+        "label": "SQLite",
+        "category": "runtime",
+        "setting": "BUILD_WITH_SQLITE=OFF",
+        "measured": true
+      },
+      {
+        "id": "tls",
+        "label": "TLS",
+        "category": "runtime",
+        "setting": "BUILD_WITH_TLS=OFF",
+        "measured": true
+      },
+      {
+        "id": "bundled-ca",
+        "label": "Bundled CA",
+        "category": "runtime",
+        "setting": "BUILD_WITH_BUNDLED_CA=OFF",
+        "measured": false
+      },
+      {
+        "id": "webcrypto",
+        "label": "WebCrypto",
+        "category": "runtime",
+        "setting": "BUILD_WITH_WEBCRYPTO=OFF",
+        "measured": false
+      },
+      {
+        "id": "ffi",
+        "label": "FFI",
+        "category": "runtime",
+        "setting": "BUILD_WITH_FFI=OFF",
+        "measured": true
+      },
+      {
+        "id": "mimalloc",
+        "label": "mimalloc",
+        "category": "runtime",
+        "setting": "BUILD_WITH_MIMALLOC=OFF",
+        "measured": false
+      },
+      {
+        "id": "repl",
+        "label": "REPL",
+        "category": "cli",
+        "setting": "BUILD_WITH_REPL=OFF + __TJS_REPL__=false",
+        "measured": true
+      },
+      {
+        "id": "wasm-full",
+        "label": "Full WAMR",
+        "category": "wasm",
+        "setting": "BUILD_WITH_WASM_FULL=OFF",
+        "measured": true
+      },
+      {
+        "id": "xhr",
+        "label": "XMLHttpRequest",
+        "category": "polyfill",
+        "setting": "__TJS_XHR__=false",
+        "measured": false
+      },
+      {
+        "id": "eval",
+        "label": "eval command",
+        "category": "cli",
+        "setting": "__TJS_EVAL__=false",
+        "measured": false
+      },
+      {
+        "id": "serve",
+        "label": "serve command",
+        "category": "cli",
+        "setting": "__TJS_SERVE__=false",
+        "measured": false
+      },
+      {
+        "id": "bundler",
+        "label": "bundle command",
+        "category": "cli",
+        "setting": "__TJS_BUNDLER__=false",
+        "measured": false
+      },
+      {
+        "id": "test-runner",
+        "label": "test command",
+        "category": "cli",
+        "setting": "__TJS_TEST_RUNNER__=false",
+        "measured": false
+      },
+      {
+        "id": "compile",
+        "label": "compile command",
+        "category": "cli",
+        "setting": "__TJS_COMPILE__=false",
+        "measured": false
+      },
+      {
+        "id": "app",
+        "label": "app command",
+        "category": "cli",
+        "setting": "__TJS_APP__=false",
+        "measured": false
+      },
+      {
+        "id": "help",
+        "label": "help text",
+        "category": "cli",
+        "setting": "__TJS_HELP__=false",
+        "measured": false
+      },
+      {
+        "id": "tls-ca",
+        "label": "--tls-ca option",
+        "category": "cli",
+        "setting": "__TJS_TLS_CA__=false",
+        "measured": false
+      }
+    ],
+    "studies": [
+      {
+        "schemaVersion": 1,
+        "id": "b6111982-macos-arm64-feature-study-v1",
+        "commit": "b6111982d2dfa8ca0b021f78b804146b4d46c096",
+        "date": "2026-08-25T12:00:00.000Z",
+        "platform": "macos-arm64",
+        "recipe": "Release build, one feature disabled per pair",
+        "toolchain": {
+          "cc": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+          "cmake": "cmake version 4.4.2",
+          "node": "v24.18.1"
+        },
+        "baseline": {
+          "binaryBytes": 6092848,
+          "sha256": "181ea861aafbe33363997f99c5abb12fdabc75cc2ac4815e5ff140b09205816f",
+          "features": {
+            "repl": true,
+            "wasm-full": true
+          }
+        },
+        "pairs": [
+          {
+            "id": "repl",
+            "label": "REPL",
+            "category": "cli",
+            "setting": "BUILD_WITH_REPL=OFF + __TJS_REPL__=false",
+            "onBytes": 6092848,
+            "offBytes": 6076240,
+            "deltaBytes": 16608,
+            "onSha256": "181ea861aafbe33363997f99c5abb12fdabc75cc2ac4815e5ff140b09205816f",
+            "offSha256": "2916b870b0a699e636cd410ca5152fc67ca24da31cb9b977d14a42ed41dca238",
+            "changedFeatures": [
+              "repl"
+            ],
+            "notes": []
+          },
+          {
+            "id": "wasm-full",
+            "label": "Full WAMR",
+            "category": "wasm",
+            "setting": "BUILD_WITH_WASM_FULL=OFF",
+            "onBytes": 6092848,
+            "offBytes": 6026272,
+            "deltaBytes": 66576,
+            "onSha256": "181ea861aafbe33363997f99c5abb12fdabc75cc2ac4815e5ff140b09205816f",
+            "offSha256": "e321aa9bb21f36f9a1f16085372763acc0c88aac0bebe836d5d98e6284ca0fb6",
+            "changedFeatures": [
+              "wasm-full"
+            ],
+            "notes": []
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-7-linux-arm64-published-profiles",
+        "tag": "slim-v26.6.0-7",
+        "commit": "a0f95ee8d9e36a53e4b3cbd06ff00efef1cbaf95",
+        "platform": "linux-arm64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 2250080,
+            "offBytes": 2184240,
+            "deltaBytes": 65840,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2708656,
+            "offBytes": 2184240,
+            "deltaBytes": 524416,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 3183016,
+            "offBytes": 2184240,
+            "deltaBytes": 998776,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-7-linux-x86_64-published-profiles",
+        "tag": "slim-v26.6.0-7",
+        "commit": "a0f95ee8d9e36a53e4b3cbd06ff00efef1cbaf95",
+        "platform": "linux-x86_64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 1960328,
+            "offBytes": 1918920,
+            "deltaBytes": 41408,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2361440,
+            "offBytes": 1918920,
+            "deltaBytes": 442520,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 2717208,
+            "offBytes": 1918920,
+            "deltaBytes": 798288,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-7-macos-arm64-published-profiles",
+        "tag": "slim-v26.6.0-7",
+        "commit": "a0f95ee8d9e36a53e4b3cbd06ff00efef1cbaf95",
+        "platform": "macos-arm64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 2059776,
+            "offBytes": 2008944,
+            "deltaBytes": 50832,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2489504,
+            "offBytes": 2008944,
+            "deltaBytes": 480560,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 2939056,
+            "offBytes": 2008944,
+            "deltaBytes": 930112,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-7-windows-x86_64-published-profiles",
+        "tag": "slim-v26.6.0-7",
+        "commit": "a0f95ee8d9e36a53e4b3cbd06ff00efef1cbaf95",
+        "platform": "windows-x86_64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 2486784,
+            "offBytes": 2421248,
+            "deltaBytes": 65536,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2921472,
+            "offBytes": 2421248,
+            "deltaBytes": 500224,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 3246592,
+            "offBytes": 2421248,
+            "deltaBytes": 825344,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-8-linux-arm64-published-profiles",
+        "tag": "slim-v26.6.0-8",
+        "commit": "1274e5e72eb30993eecf5df19ab155f080840372",
+        "platform": "linux-arm64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 2250080,
+            "offBytes": 2184240,
+            "deltaBytes": 65840,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2708656,
+            "offBytes": 2184240,
+            "deltaBytes": 524416,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 3183016,
+            "offBytes": 2184240,
+            "deltaBytes": 998776,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-8-linux-x86_64-published-profiles",
+        "tag": "slim-v26.6.0-8",
+        "commit": "1274e5e72eb30993eecf5df19ab155f080840372",
+        "platform": "linux-x86_64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 1964424,
+            "offBytes": 1914824,
+            "deltaBytes": 49600,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2365536,
+            "offBytes": 1914824,
+            "deltaBytes": 450712,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 2717208,
+            "offBytes": 1914824,
+            "deltaBytes": 802384,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-8-macos-arm64-published-profiles",
+        "tag": "slim-v26.6.0-8",
+        "commit": "1274e5e72eb30993eecf5df19ab155f080840372",
+        "platform": "macos-arm64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 2059776,
+            "offBytes": 2008960,
+            "deltaBytes": 50816,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2506016,
+            "offBytes": 2008960,
+            "deltaBytes": 497056,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 2939072,
+            "offBytes": 2008960,
+            "deltaBytes": 930112,
+            "source": "sqlite minus min"
+          }
+        ]
+      },
+      {
+        "id": "slim-v26.6.0-8-windows-x86_64-published-profiles",
+        "tag": "slim-v26.6.0-8",
+        "commit": "1274e5e72eb30993eecf5df19ab155f080840372",
+        "platform": "windows-x86_64",
+        "recipe": "published-profile-pairs",
+        "provenance": "Released artifacts; identical release and platform",
+        "pairs": [
+          {
+            "id": "ffi",
+            "onBytes": 2486784,
+            "offBytes": 2421760,
+            "deltaBytes": 65024,
+            "source": "ffi minus min"
+          },
+          {
+            "id": "tls",
+            "onBytes": 2925056,
+            "offBytes": 2421760,
+            "deltaBytes": 503296,
+            "source": "tls minus min"
+          },
+          {
+            "id": "sqlite",
+            "onBytes": 3246592,
+            "offBytes": 2421760,
+            "deltaBytes": 824832,
+            "source": "sqlite minus min"
+          }
+        ]
+      }
+    ]
+  },
+  "speed": {
+    "profiles": [
+      "balanced-min",
+      "tuned-min",
+      "min",
+      "ffi",
+      "tls",
+      "sqlite",
+      "ffi-tls",
+      "ffi-tls-sqlite"
+    ],
+    "metrics": [
+      {
+        "id": "startup-stdlib",
+        "label": "Startup + stdlib",
+        "unit": "× full time",
+        "direction": "lower"
+      },
+      {
+        "id": "json-parse",
+        "label": "JSON.parse",
+        "unit": "× full throughput",
+        "direction": "higher"
+      },
+      {
+        "id": "mandelbrot",
+        "label": "Mandelbrot",
+        "unit": "× full throughput",
+        "direction": "higher"
+      },
+      {
+        "id": "timers",
+        "label": "Timers",
+        "unit": "× full throughput",
+        "direction": "higher"
+      }
+    ],
+    "runs": [
+      {
+        "version": "slim-v26.6.0-8-4-g709c52a",
+        "commit": "709c52a2709b8ae864e9ea539edc7111f4e80fe3",
+        "date": "2026-08-24T21:06:54.550Z",
+        "platform": "linux-x86_64",
+        "quick": false,
+        "runner": {
+          "image": "ubuntu24",
+          "ci": true,
+          "cpuModel": "AMD EPYC 9V74 80-Core Processor",
+          "cores": 4,
+          "memTotal": 16766414848,
+          "release": "6.17.0-1022-azure"
+        },
+        "toolchain": {
+          "cc": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+          "cmake": "cmake version 3.31.6",
+          "node": "v24.19.0"
+        },
+        "sampling": {
+          "spawns": 50,
+          "warmups": 10,
+          "reps": 5,
+          "timeTool": "/usr/bin/time (gnu)"
+        },
+        "profiles": {
+          "balanced-min": null,
+          "tuned-min": null,
+          "min": {
+            "startup-stdlib": 1.2297350215376583,
+            "json-parse": 0.6327890703098966,
+            "mandelbrot": 0.581954260606016,
+            "timers": 0.7310895138314443
+          },
+          "ffi": {
+            "startup-stdlib": 1.2435713353348126,
+            "json-parse": 0.6097967344218593,
+            "mandelbrot": 0.6791100930054711,
+            "timers": 0.7332284017790811
+          },
+          "tls": {
+            "startup-stdlib": 1.2465735543662708,
+            "json-parse": 0.6099966677774075,
+            "mandelbrot": 0.6631618543721486,
+            "timers": 0.7356420028393261
+          },
+          "sqlite": null,
+          "ffi-tls": {
+            "startup-stdlib": 1.2519253361180003,
+            "json-parse": 0.5918693768743751,
+            "mandelbrot": 0.6933640032464397,
+            "timers": 0.7256306019220136
+          },
+          "ffi-tls-sqlite": null
+        }
+      },
+      {
+        "version": "slim-v26.6.0-8-4-g709c52a",
+        "commit": "709c52a2709b8ae864e9ea539edc7111f4e80fe3",
+        "date": "2026-08-24T21:09:25.053Z",
+        "platform": "macos-arm64",
+        "quick": false,
+        "runner": {
+          "image": "macos15",
+          "ci": true,
+          "cpuModel": "Apple M1 (Virtual)",
+          "cores": 3,
+          "memTotal": 7516192768,
+          "release": "24.6.0"
+        },
+        "toolchain": {
+          "cc": "Apple clang version 17.0.0 (clang-1700.0.13.5)",
+          "cmake": "cmake version 4.4.0",
+          "node": "v24.19.0"
+        },
+        "sampling": {
+          "spawns": 50,
+          "warmups": 10,
+          "reps": 5,
+          "timeTool": "/usr/bin/time (bsd)"
+        },
+        "profiles": {
+          "balanced-min": null,
+          "tuned-min": null,
+          "min": {
+            "startup-stdlib": 0.8938950035632275,
+            "json-parse": 0.6563141683778234,
+            "mandelbrot": 0.7120546839471182,
+            "timers": 0.6450643651489935
+          },
+          "ffi": {
+            "startup-stdlib": 0.8326074906960171,
+            "json-parse": 0.6381545174537988,
+            "mandelbrot": 0.7094017937531294,
+            "timers": 0.6781194900289043
+          },
+          "tls": {
+            "startup-stdlib": 0.8810673845910207,
+            "json-parse": 0.6563141683778234,
+            "mandelbrot": 0.7233086703522852,
+            "timers": 0.706860416655139
+          },
+          "sqlite": null,
+          "ffi-tls": {
+            "startup-stdlib": 0.8482856916620476,
+            "json-parse": 0.6588809034907598,
+            "mandelbrot": 0.7244722570891118,
+            "timers": 0.6500030907160989
+          },
+          "ffi-tls-sqlite": null
+        }
+      }
+    ]
+  }
+}

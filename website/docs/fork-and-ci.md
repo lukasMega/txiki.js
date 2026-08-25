@@ -150,6 +150,37 @@ toolchain that actually gets `-Oz` and the machine outliner — and MSVC.
 GitHub **ANDs** `paths` with `types`: a `labeled` event on a PR touching none of those paths
 would otherwise never start the workflow at all.
 
+## Updating size and speed data after a release
+
+Release builds now publish `slim-sizes-v1.json` beside the ZIP files and checksums. It contains
+exact unpacked binary sizes, ZIP sizes, feature vectors and digests for the full 8 × 4 matrix.
+Import one explicit tag; never use a moving “latest” release:
+
+```bash
+node scripts/release-size-manifest.mjs import --release slim-v26.6.0-9
+node website/scripts/generate-slim-metrics.mjs
+node website/scripts/generate-slim-metrics.mjs --check
+```
+
+The first import of a tag creates
+`website/data/slim-metrics/releases/<tag>.json`. A second identical import is a no-op; changed
+remote bytes are rejected instead of overwriting history. `slim-v26.6.0-8` predates the manifest,
+so its one-time import reads `BUILDINFO.txt` from each published ZIP. New releases must use the
+manifest path.
+
+Speed results remain separate. Dispatch `bench.yml` on the exact release tag with `profiles=all`,
+download both JSON artifacts, and add them under `benchmarks/history/<platform>/`. Nothing pushes
+those files to `slim`; review their runner, toolchain, sampling parameters and dirty/quick flags,
+then regenerate both reports:
+
+```bash
+node benchmarks/report.mjs
+node website/scripts/generate-slim-metrics.mjs
+```
+
+Before committing, require both `--check` commands. The Docusaurus build never calls GitHub and
+uses only committed JSON.
+
 ## Vendored dependencies are patched at configure time
 
 `tjs_apply_patches(<submodule> <prefix>)` globs `patches/<prefix>*.patch` and applies each to

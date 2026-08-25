@@ -14,7 +14,10 @@ on:
     - slim
     paths:
     - 'website/**'
+    - 'benchmarks/history/**'
     - 'types/**'
+    - 'scripts/measure-feature-costs.mjs'
+    - 'scripts/release-size-manifest.mjs'
     - '.github/workflows/deploy-docs-slim.yml'
   workflow_dispatch:
 
@@ -44,6 +47,8 @@ jobs:
     # missing-module error. (auto-merge-pr.yml does use it -- do not copy that line here.)
     - name: Install dependencies
       run: npm install
+    - name: Check slim metrics
+      run: node website/scripts/generate-slim-metrics.mjs --check
     # Must run before the build. `sidebars.ts` requires ./docs/api/typedoc-sidebar.cjs
     # inside a try/catch, so a missing TypeDoc step yields a *successful* build with the
     # Standard Library section silently empty.

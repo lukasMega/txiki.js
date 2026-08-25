@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "b6111982-macos-arm64-feature-study-v1",
+  "commit": "b6111982d2dfa8ca0b021f78b804146b4d46c096",
+  "date": "2026-08-25T12:00:00.000Z",
+  "platform": "macos-arm64",
+  "recipe": "Release build, one feature disabled per pair",
+  "toolchain": {
+    "cc": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+    "cmake": "cmake version 4.4.2",
+    "node": "v24.18.1"
+  },
+  "baseline": {
+    "binaryBytes": 6092848,
+    "sha256": "181ea861aafbe33363997f99c5abb12fdabc75cc2ac4815e5ff140b09205816f",
+    "features": {
+      "repl": true,
+      "wasm-full": true
+    }
+  },
+  "pairs": [
+    {
+      "id": "repl",
+      "label": "REPL",
+      "category": "cli",
+      "setting": "BUILD_WITH_REPL=OFF + __TJS_REPL__=false",
+      "onBytes": 6092848,
+      "offBytes": 6076240,
+      "deltaBytes": 16608,
+      "onSha256": "181ea861aafbe33363997f99c5abb12fdabc75cc2ac4815e5ff140b09205816f",
+      "offSha256": "2916b870b0a699e636cd410ca5152fc67ca24da31cb9b977d14a42ed41dca238",
+      "changedFeatures": [
+        "repl"
+      ],
+      "notes": []
+    },
+    {
+      "id": "wasm-full",
+      "label": "Full WAMR",
+      "category": "wasm",
+      "setting": "BUILD_WITH_WASM_FULL=OFF",
+      "onBytes": 6092848,
+      "offBytes": 6026272,
+      "deltaBytes": 66576,
+      "onSha256": "181ea861aafbe33363997f99c5abb12fdabc75cc2ac4815e5ff140b09205816f",
+      "offSha256": "e321aa9bb21f36f9a1f16085372763acc0c88aac0bebe836d5d98e6284ca0fb6",
+      "changedFeatures": [
+        "wasm-full"
+      ],
+      "notes": []
+    }
+  ]
+}
