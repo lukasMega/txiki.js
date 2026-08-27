@@ -59,6 +59,12 @@ jobs:
     - name: Build the site
       working-directory: website
       run: ./node_modules/.bin/docusaurus build --config ./docusaurus.fork.config.ts
+      # Repo-level Actions variables, not environment ones: the `github-pages`
+      # environment is attached to the deploy job only, so its variables are invisible
+      # here. Unset simply omits the beacon, which is what a fork of this fork gets.
+      env:
+        COLLECTOR_ORIGIN: ${{ vars.COLLECTOR_ORIGIN }}
+        COLLECTOR_SITE_ID: ${{ vars.COLLECTOR_SITE_ID }}
     # `website/static/CNAME` is upstream's and says `txikijs.org`; Docusaurus copies
     # static/ verbatim, so it would land in the artifact and ask Pages to serve the fork
     # at a domain the fork does not own. Removing it here rather than editing the file

@@ -12,6 +12,26 @@ const ORG = 'lukasMega';
 const PROJECT = 'txiki.js-with-slim-builds';
 const REPO = `https://github.com/${ORG}/${PROJECT}`;
 
+// Cookieless pageview collector (deno-kv-analytics). Both values come from the
+// environment and are deliberately not hardcoded -- not even assembled from parts,
+// which still reconstructs the host for anyone reading the file. Unset (the default,
+// and any fork of this fork) omits the beacon entirely rather than emitting a tag
+// that 404s on every page.
+//
+// The scheme is optional so a bare `stats.example.com` cannot silently become a
+// *relative* `<script src>` resolved against the docs host.
+const COLLECTOR_RAW = process.env.COLLECTOR_ORIGIN?.trim().replace(/\/+$/, '');
+const COLLECTOR = COLLECTOR_RAW
+  ? /^https?:\/\//.test(COLLECTOR_RAW)
+    ? COLLECTOR_RAW
+    : `https://${COLLECTOR_RAW}`
+  : undefined;
+
+// Must be an id in the collector's `SITES` env var. An unlisted id resolves to null,
+// and the collector then returns the same 1x1 gif while writing nothing -- so a typo
+// here fails silently. Verify against `GET /sites` on the collector.
+const SITE_ID = process.env.COLLECTOR_SITE_ID ?? 'txiki';
+
 // Spreading `base` is shallow: `presets` and `themeConfig` would still be the very
 // objects upstream's config exported, so every override below rebuilds the level it
 // touches rather than assigning into it.
@@ -59,6 +79,31 @@ const config: Config = {
 
   organizationName: ORG,
   projectName: PROJECT,
+
+  // Analytics is fork-only and lives here, never in upstream's config: that file is
+  // kept byte-identical, and a beacon added there would both follow a sync back into
+  // txikijs.org and conflict on every upstream merge.
+  //
+  // Appended to `base.headTags` rather than assigned: upstream has none today, but the
+  // shallow spread above means assigning would silently drop them the day it adds one.
+  headTags: [
+    ...(base.headTags ?? []),
+    ...(COLLECTOR
+      ? [
+          {
+            tagName: 'script',
+            attributes: {
+              defer: 'true',
+              src: `${COLLECTOR}/s.js`,
+              // Required: lukasmega.github.io is a shared host that no site can claim,
+              // so the collector cannot resolve the tenant from the request Host and
+              // falls through to this allowlisted id.
+              'data-site': SITE_ID,
+            },
+          },
+        ]
+      : []),
+  ],
 
   presets: [
     [
