@@ -482,6 +482,34 @@ git diff --stat -- src/cacert.c
 """
 
 # ---------------------------------------------------------------------------
+# Slim-build metrics. Feeds the charts on website/docs/size-and-speed.md.
+# See the "size and speed data" section of CLAUDE.md.
+# ---------------------------------------------------------------------------
+
+# Deliberately not a CI job and deliberately slow: 19 clean builds of QuickJS +
+# libuv + lws + mbedTLS + WAMR, serially, because they share deps/ work trees.
+# Run it when the answer is expected to have moved, not per commit. --resume
+# picks up where a killed run stopped.
+[tasks."metrics:study"]
+description = "Measure what every removable feature costs, from paired builds (slow: ~19 builds)"
+run = "node scripts/measure-feature-costs.mjs --build {{arg(name='args', var=true, default='')}}"
+
+[tasks."metrics:generate"]
+description = "Regenerate the committed website payload from release, feature and benchmark JSON"
+run = "node website/scripts/generate-slim-metrics.mjs"
+
+# The same three checks ci-docs.yml runs. A stale payload fails the PR, not the
+# deploy, so run this before pushing anything under website/data or benchmarks.
+[tasks."metrics:check"]
+description = "Verify the committed metrics data is current"
+run = """
+set -eu
+node --test scripts/test/slim-metrics.test.mjs
+node website/scripts/generate-slim-metrics.mjs --check
+node benchmarks/report.mjs --check
+"""
+
+# ---------------------------------------------------------------------------
 # Docs site. See the "docs site is published from `slim`" section of CLAUDE.md.
 # ---------------------------------------------------------------------------
 
@@ -494,7 +522,10 @@ git diff --stat -- src/cacert.c
 description = "Run the docs dev server with the fork config (the one that gets published)"
 run = """
 set -eu
-npm install
+# Skip npm install when package-lock.json hasn't changed since the last install.
+if [ ! -f node_modules/.package-lock.json ] || ! cmp -s package-lock.json node_modules/.package-lock.json; then
+  npm install
+fi
 npm run generate-api --prefix website
 cd website
 # Both configs generate into the same website/.docusaurus, and neither Docusaurus nor its

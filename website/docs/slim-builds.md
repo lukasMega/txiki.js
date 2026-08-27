@@ -14,9 +14,10 @@ Slim builds make two separate trades:
 1. Remove runtime features. This reduces size and API surface.
 2. Change compilation and linking. This reduces size without removing features.
 
-Exact paired measurements and released-profile deltas live in
-[Size and speed](./size-and-speed.md#what-each-feature-costs). Unlike the approximations below,
-those graphs retain platform, release, and build provenance.
+Every figure below comes from the paired study charted on
+[Size and speed](./size-and-speed.md#what-each-feature-costs), which keeps the platform, commit,
+toolchain and both binary digests behind each number. Browse it there for the CLI and polyfill
+switches this table does not list.
 
 Use a published profile when it fits. Otherwise, start with `min` and add only required
 features. [Downloads](./downloads.md) explains profiles; [Size and speed](./size-and-speed.md)
@@ -32,19 +33,46 @@ cmake --build build-slim
 
 ## Feature switches
 
-| CMake option | Default | Result | Approximate saving |
-| --- | --- | --- | --- |
-| `BUILD_WITH_TLS=OFF` | ON | Removes HTTPS, WSS and TLS sockets | ~0.3–0.5 MB |
-| `BUILD_WITH_FFI=OFF` *(upstream)* | ON | Removes libffi and `tjs:ffi` | ~50 KB |
-| `BUILD_WITH_BUNDLED_CA=OFF` | ON | Removes embedded Mozilla CA bundle | ~105 KB |
-| `BUILD_WITH_WEBCRYPTO=OFF` | ON | Removes `crypto.subtle` | 178.3 KiB |
-| `BUILD_WITH_MIMALLOC=OFF` *(upstream)* | ON | Uses system allocator | varies |
-| `BUILD_WITH_REPL=OFF` | ON | Removes interactive REPL | ~16.6 KB |
-| `BUILD_WITH_WASM_FULL=OFF` | ON | Keeps WAMR classic interpreter; removes SIMD | ~65 KB |
+| CMake option | Default | Result | Measured saving |
+| --- | --- | --- | ---: |
+| `BUILD_WITH_TLS=OFF` | ON | Removes HTTPS, WSS and TLS sockets | 469,863 B † |
+| `BUILD_WITH_MIMALLOC=OFF` *(upstream)* | ON | Uses system allocator | 153,239 B ‡ |
+| `BUILD_WITH_BUNDLED_CA=OFF` | ON | Removes embedded Mozilla CA bundle | 108,952 B |
+| `BUILD_WITH_WASM_FULL=OFF` | ON | Keeps WAMR classic interpreter; removes SIMD | 69,973 B |
+| `BUILD_WITH_FFI=OFF` *(upstream)* | ON | Removes libffi and `tjs:ffi` | 68,907 B |
+| `BUILD_WITH_WEBCRYPTO=OFF` | ON | Removes `crypto.subtle` | 55,144 B § |
+| `BUILD_WITH_REPL=OFF` | ON | Removes interactive REPL | 14,140 B |
 
 `BUILD_WITH_WASM=OFF` and `BUILD_WITH_SQLITE=OFF` are upstream switches used by published
 profiles. Feature state is available through `tjs.engine.features`; CLI state is available
 through `tjs.engine.cli`.
+
+<details>
+<summary>How these were measured, and why they cannot be added up</summary>
+
+Measured 2026-08-25 on macOS arm64 (Apple clang 21, CMake 4.4), commit `05707539`, one Release
+build per switch against a baseline with every feature on. **These are linked code and data
+bytes, not file size.** The two differ by more than you would expect: Mach-O pads segments to a
+16 KB page, so the REPL's 14,140 bytes move the executable file by 608 bytes and the test-runner
+subcommand's 5,952 bytes move it by *minus* 128. If what you care about is the download, read the
+released-profile sizes on [Size and speed](./size-and-speed.md) instead.
+
+- † TLS cannot be removed alone. It drags the bundled CA and the `--tls-ca` option out with it,
+  so this single number contains all three. Removing only the CA bundle is the 108,952 B row.
+- ‡ mimalloc is an allocator swap, not a capability you lose — but it is the one entry here with
+  a throughput cost, which this size-only study does not measure.
+- § Measured with **TLS on**, where `libmbedcrypto` stays linked for TLS regardless. On a
+  no-TLS build the same flag is worth far more, because WebCrypto is then the only thing keeping
+  mbedcrypto alive: a MinSizeRel + `-Oz` + LTO + ICF + strip + hardening pair measured 2,240,304 B
+  against 2,057,744 B on 2026-08-25, a **182,560 B** saving. Both numbers are correct for their
+  recipe. This is exactly why the chart shows bars and not a Sankey.
+
+Absolute numbers also move with the codegen mode. This study builds plain `Release`; a published
+profile is MinSizeRel + `-Oz` + LTO + `--gc-sections` + strip, where dead-code elimination has
+already removed some of what a feature would otherwise contribute. Read the bars as a ranking and
+an order of magnitude, not as a subtraction you can perform on a shipped artifact.
+
+</details>
 
 ## Size-only switches
 

@@ -34,8 +34,13 @@ table at all.
 
 <FeatureCostChart />
 
-Sizes from `BUILDINFO.txt` inside each published artifact of **`slim-v26.6.0-8`**
-(commit `1274e5e7`, 2026-08-24), **linux-x86_64**, unpacked and stripped.
+Each bar is one pair of builds that differ by a single switch, from a baseline with every feature
+on — measured on **macos-arm64**, the only platform whose toolchain supports every size lever this
+fork has. Use the selector to compare it against deltas derived from released profiles, which cover
+fewer features but exist for all four platforms.
+
+Sizes in the table below are from `BUILDINFO.txt` inside each published artifact of
+**`slim-v26.6.0-8`** (commit `1274e5e7`, 2026-08-24), **linux-x86_64**, unpacked and stripped.
 
 | profile | binary | vs `min` |
 | --- | ---: | ---: |
@@ -52,9 +57,17 @@ WebAssembly: WAMR is compiled out of every published profile.
 <details>
 <summary>Why these deltas are not additive, and where the numbers come from</summary>
 
-Feature costs are paired differences on one platform and release. TLS and WebCrypto share
-mbedTLS, and linker dead-code elimination changes neighboring code — which is why this page
-uses delta bars rather than a Sankey diagram.
+**The bars are linked code and data, not file size.** Executable file size is page-quantized —
+Mach-O pads segments to 16 KB on arm64 — so it cannot resolve a small feature: the test-runner
+subcommand costs 5,952 linked bytes, and removing it makes the file *128 bytes bigger*. The
+exact-values table under the chart shows both numbers side by side.
+
+**The bars cannot be summed.** TLS cannot be removed without the bundled CA and `--tls-ca` going
+with it, so its bar contains all three. WebCrypto measured with TLS on is worth 55,144 B, because
+`libmbedcrypto` stays linked for TLS either way — on a no-TLS build the same flag is worth
+182,560 B. Linker dead-code elimination moves bytes between neighbours too. A Sankey diagram would
+have to assign that shared code to one arm and would invite exactly the addition that does not
+hold, which is why this page uses delta bars.
 
 TLS is mbedTLS plus the embedded Mozilla CA bundle; SQLite is the amalgamation. Neither
 compresses much further — if you need them, you need the bytes.
@@ -65,9 +78,9 @@ shipped that day; `BUILDINFO.txt` does not record a compiler version, so treat t
 release as unpinned.
 
 The release chart reads committed records generated from published ZIP files. It never
-rebuilds an old tag or fetches GitHub during the site build. `slim-v26.6.0-7` predates the two
-alternative codegen profiles, so `balanced-min` and `tuned-min` begin at `slim-v26.6.0-8`; that
-gap is intentional, never zero bytes.
+rebuilds an old tag or fetches GitHub during the site build. The matrix has grown over time and
+the chart shows that honestly: `slim-v26.6.0-6` shipped four profiles, `-7` six, `-8` eight. A
+profile that did not exist yet is a gap, never zero bytes.
 
 </details>
 

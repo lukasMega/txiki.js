@@ -25,7 +25,10 @@ const PROFILES = [
     'ffi-tls-sqlite',
 ];
 
-const FEATURE_CATALOG = [
+// Every removable capability the charts know about. scripts/feature-study-v1.json
+// must cover exactly these ids; slim-metrics.test.mjs asserts the two agree, so an
+// entry added here without a build recipe fails before it can render as unmeasured.
+export const FEATURE_CATALOG = [
     { id: 'wasm', label: 'WebAssembly', category: 'runtime', setting: 'BUILD_WITH_WASM=OFF' },
     { id: 'sqlite', label: 'SQLite', category: 'runtime', setting: 'BUILD_WITH_SQLITE=OFF' },
     { id: 'tls', label: 'TLS', category: 'runtime', setting: 'BUILD_WITH_TLS=OFF' },
@@ -216,23 +219,31 @@ export function generate() {
     }, null, 2)}\n`;
 }
 
-const { values } = parseArgs({
-    options: {
-        check: { type: 'boolean', default: false },
-        out: { type: 'string', default: OUTPUT },
-    },
-});
-const generated = generate();
+function main() {
+    const { values } = parseArgs({
+        options: {
+            check: { type: 'boolean', default: false },
+            out: { type: 'string', default: OUTPUT },
+        },
+    });
+    const generated = generate();
 
-if (values.check) {
-    const current = fs.existsSync(values.out) ? fs.readFileSync(values.out, 'utf8') : '';
+    if (values.check) {
+        const current = fs.existsSync(values.out) ? fs.readFileSync(values.out, 'utf8') : '';
 
-    if (current !== generated) {
-        process.stderr.write(`${path.relative(ROOT, values.out)} is stale; run generate-slim-metrics.mjs\n`);
-        process.exitCode = 1;
+        if (current !== generated) {
+            process.stderr.write(`${path.relative(ROOT, values.out)} is stale; run generate-slim-metrics.mjs\n`);
+            process.exitCode = 1;
+        }
+    } else {
+        fs.mkdirSync(path.dirname(values.out), { recursive: true });
+        fs.writeFileSync(values.out, generated);
+        process.stdout.write(`wrote ${path.relative(ROOT, values.out)}\n`);
     }
-} else {
-    fs.mkdirSync(path.dirname(values.out), { recursive: true });
-    fs.writeFileSync(values.out, generated);
-    process.stdout.write(`wrote ${path.relative(ROOT, values.out)}\n`);
+}
+
+// Guarded so the catalog above can be imported by scripts/test/slim-metrics.test.mjs
+// without the CLI running on import.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main();
 }

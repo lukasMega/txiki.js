@@ -627,6 +627,88 @@ content, and it is upstream-owned. It cannot catch a fork `baseUrl` or sidebar r
 
 See `.claude/plans/2026-08-25_publish-slim-docs-gh-pages.md`.
 
+## The size and speed charts run on committed data, never a live fetch
+
+`website/docs/size-and-speed.md` renders three charts from
+`website/src/data/slim-metrics.generated.json`, which is **tracked** and is a pure function of
+three committed inputs. The Docusaurus build makes no network call; `ci-docs.yml` and
+`deploy-docs-slim.yml` both run `generate-slim-metrics.mjs --check`, so a stale payload fails
+the PR.
+
+| input | written by | evidence class |
+| --- | --- | --- |
+| `website/data/slim-metrics/releases/<tag>.json` | `scripts/release-size-manifest.mjs import` | bytes actually published |
+| `website/data/slim-metrics/feature-costs/<commit>-<platform>.json` | `scripts/measure-feature-costs.mjs --build` | one controlled paired-build study |
+| `benchmarks/history/<platform>/*.json` | `bench.yml`, committed by hand | noisy runner timings |
+
+**Never merge the three.** They answer different questions at different confidence levels, and
+the charts label which one a number came from. In particular the generator *also* derives
+"published profile" deltas (`ffi` minus `min`, etc.) straight from release sizes — those are a
+different study from the paired one and are labelled `published-profile-pairs`.
+
+### There is no Sankey, on purpose
+
+Feature costs are **not additive**, so a diagram whose semantics are conserved flow would lie:
+TLS and WebCrypto share mbedTLS, `bundled-ca` cannot exist without TLS, and `--gc-sections` plus
+LTO move bytes between neighbours. A Sankey would have to assign the shared bytes to one arm
+arbitrarily and would invite readers to sum the arms. Sorted horizontal delta bars with a
+"these cannot be summed" warning is the deliberate choice. (A *profile-composition* Sankey —
+`full` → each published profile, where every split is one real build — would be a different
+chart from different data, and does not exist yet.)
+
+### The feature study is a study, not a CI job
+
+```bash
+mise run metrics:study              # ~19 serial clean builds; budget an evening
+mise run metrics:study -- --resume  # pick up after a killed run
+mise run metrics:check              # the three --check commands ci-docs.yml runs
+```
+
+`scripts/feature-study-v1.json` is the switch table: one entry per removable capability, its
+CMake options, its esbuild defines, and the runtime probe that proves the switch landed. The
+driver builds a **maximal** baseline (every feature on, every CLI define `true`) and turns
+exactly one thing off per pair. That baseline matters: every *published* profile already ships
+`__TJS_EVAL__=false` and friends, so pairing off `min` would measure off→off and report 0 B.
+
+**The bars are linked section bytes, not file size, and that is load-bearing.** Executable file
+size is page-quantized — Mach-O pads every segment to 16 KB on arm64 — so it cannot resolve a
+small feature. Measured here: dropping XHR removes 6,592 bytes from `__TEXT,__const`, `size -m`
+shows `Segment __TEXT` *identical* at 5,259,264 in both binaries, and the file shrinks by **224
+bytes**. Eight of the eighteen pairs are CLI defines of that magnitude and would every one of them
+have charted as noise. The record carries both: `deltaLinkedBytes` (what the feature costs) and
+`deltaBytes` (what the download changes by), and the chart's table shows them side by side.
+
+Three more things the driver enforces, each of which is a way the study silently produces wrong bars:
+
+- **A runtime probe per binary.** `tjs.engine.features` / `tjs.engine.cli` must change exactly
+  the keys the recipe declares — no more, no fewer. A build that came out smaller while keeping
+  its feature is a broken measurement, not a saving. `mimalloc` and `xhr` have no entry in either
+  vector and are probed through `tjs.engine.versions.mimalloc` and `globalThis.XMLHttpRequest`.
+  `wasm-full` has **no** runtime signal at all (classic and fast interp both report `wasm: true`),
+  so it declares `"probe": null` with a `probeNote` — an unprobeable pair must say so rather than
+  be indistinguishable from one whose probe was forgotten.
+- **`src/bundles/c` is snapshotted and restored** around every define-changing variant, and the
+  run hard-errors if the tracked tree is dirty at the end. It is tracked in this fork.
+- **The record's `date` is the commit's committer date**, not wall-clock, so rerunning at the same
+  commit and toolchain reproduces the file byte-for-byte.
+
+Companion switches are declared, not discovered: `BUILD_WITH_TLS=OFF` forces the bundled CA and
+`__TJS_TLS_CA__` off with it, so the `tls` bar contains all three costs and lists them in
+`companionChanges`. `bundled-ca` and `tls-ca` get their own pairs measured with TLS **on**.
+
+`slim-metrics.test.mjs` asserts the recipe, `FEATURE_IDS` in the recorder, and `FEATURE_CATALOG`
+in the website generator all name the same features with the same labels and categories. Adding a
+catalog entry without a build recipe fails there rather than rendering as a permanently unmeasured
+bar.
+
+The study drives GNU `make` and does not run on Windows — unlike `build-dist.mjs`, whose whole
+reason for being Node is the MSVC runner. It also cannot use `build-dist.mjs`: that script's
+profile table is a fixed six entries with hardcoded esbuild defines and per-profile size budgets,
+none of which can express "everything on except X".
+
+See `.claude/plans/2026-08-25_slim-build-docs-metrics.md` (pipeline) and
+`.claude/plans/2026-08-25_slim-metrics-complete-data.md` (filling it with measurements).
+
 ## Required status checks must come from an unfiltered workflow
 
 GitHub reports **no check at all** for a workflow that path filtering skipped. A required context
