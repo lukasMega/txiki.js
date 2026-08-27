@@ -19,7 +19,16 @@ export interface FeaturePair {
   onBytes: number;
   offBytes: number;
   deltaBytes: number;
-  source: string;
+  // Sum of the non-zerofill sections. Present only on paired studies, and the
+  // number the chart plots when it is: executable file size is page-quantized
+  // (16 KB segments on Mach-O arm64), so it cannot resolve a small feature.
+  onLinkedBytes?: number;
+  offLinkedBytes?: number;
+  deltaLinkedBytes?: number;
+  // Only the derived published-profile pairs carry one ("ffi minus min"); a
+  // paired study's provenance lives on the study, so the chart falls back to
+  // the catalog's build setting there.
+  source?: string;
 }
 
 export interface FeatureStudy {

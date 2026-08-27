@@ -21,25 +21,44 @@ the same size trade — they are marked in the table.
 
 ## Optional features
 
-Exact paired measurements and released-profile deltas live in
-[Size and speed](./size-and-speed.md#what-each-feature-costs). Unlike the approximations below,
-those graphs retain platform, release, and build provenance.
+Every figure below comes from the paired study charted on
+[Size and speed](./size-and-speed.md#what-each-feature-costs), which keeps the platform, commit,
+toolchain and both binary digests behind each number. Browse it there for the CLI and polyfill
+switches this table does not list.
 
-| CMake option                | Default | Effect                                       | Approx savings |
-|-----------------------------|---------|----------------------------------------------|----------------|
-| `BUILD_WITH_TLS=OFF`        | ON      | Remove TLS (HTTPS/WSS/TLSSocket)             | ~0.3–0.5 MB    |
-| `BUILD_WITH_FFI=OFF` *(upstream)* | ON | Remove libffi and the `tjs:ffi` module   | ~50 KB         |
-| `BUILD_WITH_BUNDLED_CA=OFF` | ON      | Drop the embedded Mozilla CA bundle          | ~105 KB        |
-| `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | ~178 KiB       |
-| `BUILD_WITH_MIMALLOC=OFF` *(upstream)* | ON | Use the system allocator instead of mimalloc | varies |
-| `BUILD_WITH_REPL=OFF`       | ON      | Remove the interactive REPL                  | ~16.6 KB       |
-| `BUILD_WITH_WASM_FULL=OFF`  | ON      | WAMR classic interpreter, no SIMD            | ~65 KB         |
+| CMake option                | Default | Effect                                       | Measured saving |
+|-----------------------------|---------|----------------------------------------------|-----------------|
+| `BUILD_WITH_TLS=OFF`        | ON      | Remove TLS (HTTPS/WSS/TLSSocket)             | 469,863 B †     |
+| `BUILD_WITH_MIMALLOC=OFF` *(upstream)* | ON | Use the system allocator instead of mimalloc | 153,239 B ‡ |
+| `BUILD_WITH_BUNDLED_CA=OFF` | ON      | Drop the embedded Mozilla CA bundle          | 108,952 B       |
+| `BUILD_WITH_WASM_FULL=OFF`  | ON      | WAMR classic interpreter, no SIMD            | 69,973 B        |
+| `BUILD_WITH_FFI=OFF` *(upstream)* | ON | Remove libffi and the `tjs:ffi` module    | 68,907 B        |
+| `BUILD_WITH_WEBCRYPTO=OFF`  | ON      | Remove `crypto.subtle`                       | 55,144 B §      |
+| `BUILD_WITH_REPL=OFF`       | ON      | Remove the interactive REPL                  | 14,140 B        |
 
-The `BUILD_WITH_WEBCRYPTO` figure was measured 2026-08-25 on macOS arm64 (Apple clang 21),
-MinSizeRel + `-Oz` + LTO + ICF + strip + hardening, two builds differing in that one flag:
-2,240,304 B against 2,057,744 B, a **182,560 B (178.3 KiB)** saving. The `~165 KB` this table
-carried before was the `__TEXT` segment delta alone (163,840 B), which omits `__DATA_CONST` —
-the same text-segment-vs-binary-size mistake as the retired `~80 KB` REPL figure.
+Measured 2026-08-25 on macOS arm64 (Apple clang 21, CMake 4.4), commit `05707539`, one Release
+build per switch against a baseline with every feature on. **These are linked code and data
+bytes, not file size.** The two differ by more than you would expect: Mach-O pads segments to a
+16 KB page, so the REPL's 14,140 bytes move the executable file by 608 bytes and the test-runner
+subcommand's 5,952 bytes move it by *minus* 128. If what you care about is the download, read the
+released-profile sizes on [Size and speed](./size-and-speed.md) instead.
+
+**The savings are not additive**, and the footnotes are where that bites:
+
+- † TLS cannot be removed alone. It drags the bundled CA and the `--tls-ca` option out with it,
+  so this single number contains all three. Removing only the CA bundle is the 108,952 B row.
+- ‡ mimalloc is an allocator swap, not a capability you lose — but it is the one entry here with
+  a throughput cost, which this size-only study does not measure.
+- § Measured with **TLS on**, where `libmbedcrypto` stays linked for TLS regardless. On a
+  no-TLS build the same flag is worth far more, because WebCrypto is then the only thing keeping
+  mbedcrypto alive: a MinSizeRel + `-Oz` + LTO + ICF + strip + hardening pair measured 2,240,304 B
+  against 2,057,744 B on 2026-08-25, a **182,560 B** saving. Both numbers are correct for their
+  recipe. This is exactly why the chart shows bars and not a Sankey.
+
+Absolute numbers also move with the codegen mode. This study builds plain `Release`; a published
+profile is MinSizeRel + `-Oz` + LTO + `--gc-sections` + strip, where dead-code elimination has
+already removed some of what a feature would otherwise contribute. Read the bars as a ranking and
+an order of magnitude, not as a subtraction you can perform on a shipped artifact.
 
 When TLS is disabled, plain HTTP/WS and TCP/UDP still work, but `https://` / `wss://` requests
 and `TLSSocket`/`TLSServerSocket` throw "TLS not supported in this build"; the Web Crypto API

@@ -181,6 +181,28 @@ node website/scripts/generate-slim-metrics.mjs
 Before committing, require both `--check` commands. The Docusaurus build never calls GitHub and
 uses only committed JSON.
 
+### Re-measuring what each feature costs
+
+The third input is on its own schedule. It is a controlled study, not a per-release step: rerun it
+when a dependency bump or a new removable switch is expected to have moved the answer, not because
+a release happened.
+
+```bash
+mise run metrics:study     # ~19 clean serial builds; budget an evening
+mise run metrics:check     # the three --check commands ci-docs.yml runs
+```
+
+`scripts/feature-study-v1.json` holds the switch table: for each removable capability, the CMake
+options, the esbuild defines, and the runtime probe that proves the switch landed. The driver
+builds a maximal baseline — every feature on, every CLI define `true` — and turns exactly one
+thing off per pair, because every published profile already ships most of the CLI defines off and
+pairing against one of those would measure nothing.
+
+It refuses to start on a dirty tree, restores `src/bundles/c` around every define-changing build,
+and fails if a binary came out smaller while still reporting the feature it was supposed to lose.
+The record's date is the commit's date rather than wall-clock, so rerunning at the same commit and
+toolchain reproduces the file byte for byte. Windows is not supported: the study drives `make`.
+
 ## Vendored dependencies are patched at configure time
 
 `tjs_apply_patches(<submodule> <prefix>)` globs `patches/<prefix>*.patch` and applies each to

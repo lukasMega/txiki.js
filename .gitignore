@@ -15,6 +15,9 @@ test_dir*/
 build-dist/
 build-host/
 dist/
+# Scratch for `measure-feature-costs.mjs --build`: one CMake tree at a time plus
+# the ~19 binaries it keeps for --resume. Tens of GB while it runs.
+/.feature-study/
 # Local-only benchmark scratch. Anchored and named exactly, NOT a bare `bench*`:
 # that glob also swallowed the tracked `benchmarks/` tree, so `git add` there
 # staged nothing and said so silently. `benchmark/` holds two tracked upstream

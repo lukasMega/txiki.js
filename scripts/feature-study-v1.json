@@ -1,0 +1,239 @@
+{
+  "schemaVersion": 1,
+  "recipe": "feature-study-v1",
+  "description": "Release build, every removable feature ON, one switch turned off per pair.",
+  "buildType": "Release",
+  "baseline": {
+    "cmake": {
+      "BUILD_WITH_WASM": "ON",
+      "BUILD_WITH_WASM_FULL": "ON",
+      "BUILD_WITH_SQLITE": "ON",
+      "BUILD_WITH_TLS": "ON",
+      "BUILD_WITH_BUNDLED_CA": "ON",
+      "BUILD_WITH_WEBCRYPTO": "ON",
+      "BUILD_WITH_FFI": "ON",
+      "BUILD_WITH_MIMALLOC": "ON",
+      "BUILD_WITH_REPL": "ON"
+    },
+    "defines": {
+      "__TJS_REPL__": "true",
+      "__TJS_EVAL__": "true",
+      "__TJS_SERVE__": "true",
+      "__TJS_BUNDLER__": "true",
+      "__TJS_TEST_RUNNER__": "true",
+      "__TJS_COMPILE__": "true",
+      "__TJS_APP__": "true",
+      "__TJS_HELP__": "true",
+      "__TJS_TLS_CA__": "true",
+      "__TJS_XHR__": "true"
+    },
+    "probe": {
+      "features": {
+        "wasm": true,
+        "sqlite": true,
+        "tls": true,
+        "bundledCa": true,
+        "webcrypto": true,
+        "ffi": true
+      },
+      "cli": {
+        "repl": true,
+        "eval": true,
+        "serve": true,
+        "bundler": true,
+        "testRunner": true,
+        "compile": true,
+        "app": true,
+        "help": true,
+        "tlsCa": true
+      },
+      "mimalloc": true,
+      "xhr": true
+    }
+  },
+  "pairs": [
+    {
+      "id": "wasm",
+      "label": "WebAssembly",
+      "category": "runtime",
+      "setting": "BUILD_WITH_WASM=OFF",
+      "cmake": { "BUILD_WITH_WASM": "OFF" },
+      "probe": { "features": { "wasm": false } },
+      "notes": [
+        "Drops the WebAssembly global and tjs:wasi.",
+        "BUILD_WITH_WASM_FULL becomes inert here; the wasm-full pair is measured with WASM on."
+      ]
+    },
+    {
+      "id": "sqlite",
+      "label": "SQLite",
+      "category": "runtime",
+      "setting": "BUILD_WITH_SQLITE=OFF",
+      "cmake": { "BUILD_WITH_SQLITE": "OFF" },
+      "probe": { "features": { "sqlite": false } },
+      "notes": [ "Drops tjs:sqlite; localStorage falls back to in-memory." ]
+    },
+    {
+      "id": "tls",
+      "label": "TLS",
+      "category": "runtime",
+      "setting": "BUILD_WITH_TLS=OFF",
+      "cmake": { "BUILD_WITH_TLS": "OFF", "BUILD_WITH_BUNDLED_CA": "OFF" },
+      "defines": { "__TJS_TLS_CA__": "false" },
+      "companionChanges": [ "bundled-ca", "tls-ca" ],
+      "probe": {
+        "features": { "tls": false, "bundledCa": false },
+        "cli": { "tlsCa": false }
+      },
+      "notes": [
+        "Bundled CA cannot exist without TLS, so its cost is inside this delta.",
+        "__TJS_TLS_CA__ must go with it: the vm.c CA setter behind --tls-ca is compiled out.",
+        "Measure the bundled-CA and --tls-ca costs separately from their own pairs, which keep TLS on."
+      ]
+    },
+    {
+      "id": "bundled-ca",
+      "label": "Bundled CA",
+      "category": "runtime",
+      "setting": "BUILD_WITH_BUNDLED_CA=OFF",
+      "cmake": { "BUILD_WITH_BUNDLED_CA": "OFF" },
+      "probe": { "features": { "bundledCa": false } },
+      "notes": [
+        "Measured with TLS on; the option only exists there.",
+        "lws's OS-trust-store fallback is not implemented for mbedtls, so this needs TJS_CA_BUNDLE at runtime."
+      ]
+    },
+    {
+      "id": "webcrypto",
+      "label": "WebCrypto",
+      "category": "runtime",
+      "setting": "BUILD_WITH_WEBCRYPTO=OFF",
+      "cmake": { "BUILD_WITH_WEBCRYPTO": "OFF" },
+      "probe": { "features": { "webcrypto": false } },
+      "notes": [
+        "WinterTC-breaking: drops crypto.subtle. getRandomValues/randomUUID stay.",
+        "Also breaks tjs app pack / tjs app compile, which hash via crypto.subtle.digest.",
+        "No published profile sets it."
+      ]
+    },
+    {
+      "id": "ffi",
+      "label": "FFI",
+      "category": "runtime",
+      "setting": "BUILD_WITH_FFI=OFF",
+      "cmake": { "BUILD_WITH_FFI": "OFF" },
+      "probe": { "features": { "ffi": false } },
+      "notes": [ "Upstream's option; it lives in CMakeLists.txt, not cmake/slim.cmake." ]
+    },
+    {
+      "id": "mimalloc",
+      "label": "mimalloc",
+      "category": "runtime",
+      "setting": "BUILD_WITH_MIMALLOC=OFF",
+      "cmake": { "BUILD_WITH_MIMALLOC": "OFF" },
+      "probe": { "mimalloc": false },
+      "notes": [
+        "An allocator swap, not a user-visible capability: nothing in tjs.engine.features changes.",
+        "Probed through tjs.engine.versions.mimalloc, which is only defined when it is linked in.",
+        "Expect a throughput cost that this size-only study does not measure."
+      ]
+    },
+    {
+      "id": "wasm-full",
+      "label": "Full WAMR",
+      "category": "wasm",
+      "setting": "BUILD_WITH_WASM_FULL=OFF",
+      "cmake": { "BUILD_WITH_WASM_FULL": "OFF" },
+      "probe": null,
+      "probeNote": "No runtime signal: WAMR classic-interp and fast-interp both report features.wasm=true. WAMR_BUILD_MULTI_MODULE deliberately stays on, so grow() keeps working.",
+      "notes": [ "Reduced capability, not removed: WebAssembly still runs, slower." ]
+    },
+    {
+      "id": "xhr",
+      "label": "XMLHttpRequest",
+      "category": "polyfill",
+      "setting": "__TJS_XHR__=false",
+      "defines": { "__TJS_XHR__": "false" },
+      "probe": { "xhr": false },
+      "notes": [ "Polyfill bundle only; no CMake half." ]
+    },
+    {
+      "id": "repl",
+      "label": "REPL",
+      "category": "cli",
+      "setting": "BUILD_WITH_REPL=OFF + __TJS_REPL__=false",
+      "cmake": { "BUILD_WITH_REPL": "OFF" },
+      "defines": { "__TJS_REPL__": "false" },
+      "probe": { "cli": { "repl": false } },
+      "notes": [
+        "The only CLI entry with a C half. Both halves or neither: the define alone leaves ~14 KB of unreachable bytecode linked in, the CMake option alone leaves JS calling a missing binding."
+      ]
+    },
+    {
+      "id": "eval",
+      "label": "eval command",
+      "category": "cli",
+      "setting": "__TJS_EVAL__=false",
+      "defines": { "__TJS_EVAL__": "false" },
+      "probe": { "cli": { "eval": false } }
+    },
+    {
+      "id": "serve",
+      "label": "serve command",
+      "category": "cli",
+      "setting": "__TJS_SERVE__=false",
+      "defines": { "__TJS_SERVE__": "false" },
+      "probe": { "cli": { "serve": false } }
+    },
+    {
+      "id": "bundler",
+      "label": "bundle command",
+      "category": "cli",
+      "setting": "__TJS_BUNDLER__=false",
+      "defines": { "__TJS_BUNDLER__": "false" },
+      "probe": { "cli": { "bundler": false } }
+    },
+    {
+      "id": "test-runner",
+      "label": "test command",
+      "category": "cli",
+      "setting": "__TJS_TEST_RUNNER__=false",
+      "defines": { "__TJS_TEST_RUNNER__": "false" },
+      "probe": { "cli": { "testRunner": false } }
+    },
+    {
+      "id": "compile",
+      "label": "compile command",
+      "category": "cli",
+      "setting": "__TJS_COMPILE__=false",
+      "defines": { "__TJS_COMPILE__": "false" },
+      "probe": { "cli": { "compile": false } },
+      "notes": [ "Every published profile keeps this one; it is what tjs app compile builds on." ]
+    },
+    {
+      "id": "app",
+      "label": "app command",
+      "category": "cli",
+      "setting": "__TJS_APP__=false",
+      "defines": { "__TJS_APP__": "false" },
+      "probe": { "cli": { "app": false } }
+    },
+    {
+      "id": "help",
+      "label": "help text",
+      "category": "cli",
+      "setting": "__TJS_HELP__=false",
+      "defines": { "__TJS_HELP__": "false" },
+      "probe": { "cli": { "help": false } }
+    },
+    {
+      "id": "tls-ca",
+      "label": "--tls-ca option",
+      "category": "cli",
+      "setting": "__TJS_TLS_CA__=false",
+      "defines": { "__TJS_TLS_CA__": "false" },
+      "probe": { "cli": { "tlsCa": false } },
+      "notes": [ "Measured with TLS on; on a non-TLS build it is forced off anyway." ]
+    }
+  ]
+}

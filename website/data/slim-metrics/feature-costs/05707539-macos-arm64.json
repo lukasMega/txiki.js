@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 1,
+  "id": "05707539-macos-arm64-feature-study-v1",
+  "commit": "05707539ed008cebe3501773971ec0f5a1cce21e",
+  "date": "2026-08-25T16:47:15.000Z",
+  "platform": "macos-arm64",
+  "recipe": "Release build, every removable feature ON, one switch turned off per pair.",
+  "toolchain": {
+    "cc": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+    "cmake": "cmake version 4.4.2",
+    "node": "v24.18.1"
+  },
+  "baseline": {
+    "binaryBytes": 6093968,
+    "sha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+    "linkedBytes": 5400609,
+    "features": {
+      "wasm": true,
+      "sqlite": true,
+      "bundled-ca": true,
+      "webcrypto": true,
+      "ffi": true,
+      "mimalloc": true,
+      "wasm-full": true,
+      "tls": true,
+      "xhr": true,
+      "repl": true,
+      "eval": true,
+      "serve": true,
+      "bundler": true,
+      "test-runner": true,
+      "compile": true,
+      "app": true,
+      "help": true,
+      "tls-ca": true
+    }
+  },
+  "pairs": [
+    {
+      "id": "wasm",
+      "label": "WebAssembly",
+      "category": "runtime",
+      "setting": "BUILD_WITH_WASM=OFF",
+      "onBytes": 6093968,
+      "offBytes": 5671920,
+      "deltaBytes": 422048,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5044956,
+      "deltaLinkedBytes": 355653,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "48640259e016becd55a38ded13c34590a8063b2bd1ae5abb4c169ec2d6b3382a",
+      "changedFeatures": [
+        "wasm"
+      ],
+      "notes": [
+        "Drops the WebAssembly global and tjs:wasi.",
+        "BUILD_WITH_WASM_FULL becomes inert here; the wasm-full pair is measured with WASM on."
+      ]
+    },
+    {
+      "id": "sqlite",
+      "label": "SQLite",
+      "category": "runtime",
+      "setting": "BUILD_WITH_SQLITE=OFF",
+      "onBytes": 6093968,
+      "offBytes": 4570672,
+      "deltaBytes": 1523296,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 3969210,
+      "deltaLinkedBytes": 1431399,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "ef08565bb07a7ec8473a0354729118e173fc590f0e623a4f289302ead1c7d78b",
+      "changedFeatures": [
+        "sqlite"
+      ],
+      "notes": [
+        "Drops tjs:sqlite; localStorage falls back to in-memory."
+      ]
+    },
+    {
+      "id": "tls",
+      "label": "TLS",
+      "category": "runtime",
+      "setting": "BUILD_WITH_TLS=OFF",
+      "onBytes": 6093968,
+      "offBytes": 5580592,
+      "deltaBytes": 513376,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 4930746,
+      "deltaLinkedBytes": 469863,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "74c7c7d514b5ad6019b17f3558f2b0e2e83c2245c023225e3f97992ce18000bd",
+      "changedFeatures": [
+        "bundled-ca",
+        "tls",
+        "tls-ca"
+      ],
+      "notes": [
+        "Bundled CA cannot exist without TLS, so its cost is inside this delta.",
+        "__TJS_TLS_CA__ must go with it: the vm.c CA setter behind --tls-ca is compiled out.",
+        "Measure the bundled-CA and --tls-ca costs separately from their own pairs, which keep TLS on."
+      ]
+    },
+    {
+      "id": "bundled-ca",
+      "label": "Bundled CA",
+      "category": "runtime",
+      "setting": "BUILD_WITH_BUNDLED_CA=OFF",
+      "onBytes": 6093968,
+      "offBytes": 5994336,
+      "deltaBytes": 99632,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5291657,
+      "deltaLinkedBytes": 108952,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "22432e326e9c0ae62130540f71cdf0ea7eb85aa0767d2ca65b817e93e6f74846",
+      "changedFeatures": [
+        "bundled-ca"
+      ],
+      "notes": [
+        "Measured with TLS on; the option only exists there.",
+        "lws's OS-trust-store fallback is not implemented for mbedtls, so this needs TJS_CA_BUNDLE at runtime."
+      ]
+    },
+    {
+      "id": "webcrypto",
+      "label": "WebCrypto",
+      "category": "runtime",
+      "setting": "BUILD_WITH_WEBCRYPTO=OFF",
+      "onBytes": 6093968,
+      "offBytes": 6030272,
+      "deltaBytes": 63696,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5345465,
+      "deltaLinkedBytes": 55144,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "217da0bbcaf019a4da4c0e274bfa02abd1b0a258e58d0c2b171281779f7c7d20",
+      "changedFeatures": [
+        "webcrypto"
+      ],
+      "notes": [
+        "WinterTC-breaking: drops crypto.subtle. getRandomValues/randomUUID stay.",
+        "Also breaks tjs app pack / tjs app compile, which hash via crypto.subtle.digest.",
+        "No published profile sets it."
+      ]
+    },
+    {
+      "id": "ffi",
+      "label": "FFI",
+      "category": "runtime",
+      "setting": "BUILD_WITH_FFI=OFF",
+      "onBytes": 6093968,
+      "offBytes": 6019088,
+      "deltaBytes": 74880,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5331702,
+      "deltaLinkedBytes": 68907,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "6204339c822dd3fd56d11feb927c155d824e259005297282730629d7b18bb7fd",
+      "changedFeatures": [
+        "ffi"
+      ],
+      "notes": [
+        "Upstream's option; it lives in CMakeLists.txt, not cmake/slim.cmake."
+      ]
+    },
+    {
+      "id": "mimalloc",
+      "label": "mimalloc",
+      "category": "runtime",
+      "setting": "BUILD_WITH_MIMALLOC=OFF",
+      "onBytes": 6093968,
+      "offBytes": 5921936,
+      "deltaBytes": 172032,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5247370,
+      "deltaLinkedBytes": 153239,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "5f3e8c8bd2534ac813da4a235387e84bd6f408374205474008355b85a511f897",
+      "changedFeatures": [
+        "mimalloc"
+      ],
+      "notes": [
+        "An allocator swap, not a user-visible capability: nothing in tjs.engine.features changes.",
+        "Probed through tjs.engine.versions.mimalloc, which is only defined when it is linked in.",
+        "Expect a throughput cost that this size-only study does not measure."
+      ]
+    },
+    {
+      "id": "repl",
+      "label": "REPL",
+      "category": "cli",
+      "setting": "BUILD_WITH_REPL=OFF + __TJS_REPL__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093360,
+      "deltaBytes": 608,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5386469,
+      "deltaLinkedBytes": 14140,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "9d7bcd67e3e3eb5e8992b89e3c23a16934f6148a25d7f0d8f77924419c00bd96",
+      "changedFeatures": [
+        "repl"
+      ],
+      "notes": [
+        "The only CLI entry with a C half. Both halves or neither: the define alone leaves ~14 KB of unreachable bytecode linked in, the CMake option alone leaves JS calling a missing binding."
+      ]
+    },
+    {
+      "id": "wasm-full",
+      "label": "Full WAMR",
+      "category": "wasm",
+      "setting": "BUILD_WITH_WASM_FULL=OFF",
+      "onBytes": 6093968,
+      "offBytes": 6026992,
+      "deltaBytes": 66976,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5330636,
+      "deltaLinkedBytes": 69973,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "5316efea3e702c018d510f4772b37b74f3c861cf125e06bac1428d20f072c423",
+      "changedFeatures": [
+        "wasm-full"
+      ],
+      "notes": [
+        "Reduced capability, not removed: WebAssembly still runs, slower."
+      ]
+    },
+    {
+      "id": "xhr",
+      "label": "XMLHttpRequest",
+      "category": "polyfill",
+      "setting": "__TJS_XHR__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093744,
+      "deltaBytes": 224,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5394017,
+      "deltaLinkedBytes": 6592,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "b5141b4ecf6ece390f6bc1c02217b1bd8a8d998c98899d2ab00632c7b048142e",
+      "changedFeatures": [
+        "xhr"
+      ],
+      "notes": [
+        "Polyfill bundle only; no CMake half."
+      ]
+    },
+    {
+      "id": "eval",
+      "label": "eval command",
+      "category": "cli",
+      "setting": "__TJS_EVAL__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093776,
+      "deltaBytes": 192,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5400481,
+      "deltaLinkedBytes": 128,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "b755ad95045bba5a47ff0c63e5fe248903d4d125cdfd9a4a05f28c061c3f5e81",
+      "changedFeatures": [
+        "eval"
+      ],
+      "notes": []
+    },
+    {
+      "id": "serve",
+      "label": "serve command",
+      "category": "cli",
+      "setting": "__TJS_SERVE__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093824,
+      "deltaBytes": 144,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5399777,
+      "deltaLinkedBytes": 832,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "dcd041dcc3daa4aac2cb09720476b62bf0a204aa51d9fea45ee6467481f954a8",
+      "changedFeatures": [
+        "serve"
+      ],
+      "notes": []
+    },
+    {
+      "id": "bundler",
+      "label": "bundle command",
+      "category": "cli",
+      "setting": "__TJS_BUNDLER__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093920,
+      "deltaBytes": 48,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5393313,
+      "deltaLinkedBytes": 7296,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "b336328f1c2a805491857242835f356b9647f663a8bf39c094f8988d0ed5c18a",
+      "changedFeatures": [
+        "bundler"
+      ],
+      "notes": []
+    },
+    {
+      "id": "test-runner",
+      "label": "test command",
+      "category": "cli",
+      "setting": "__TJS_TEST_RUNNER__=false",
+      "onBytes": 6093968,
+      "offBytes": 6094096,
+      "deltaBytes": -128,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5394657,
+      "deltaLinkedBytes": 5952,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "9c5c1fc1b8480931c0e9e42c8d9ce7cc51e92980a5f91e860cf2d03417e37cf5",
+      "changedFeatures": [
+        "test-runner"
+      ],
+      "notes": []
+    },
+    {
+      "id": "compile",
+      "label": "compile command",
+      "category": "cli",
+      "setting": "__TJS_COMPILE__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093920,
+      "deltaBytes": 48,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5399841,
+      "deltaLinkedBytes": 768,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "f02eba13a2672ba4b3fca2c86f38405d77e1603e1bbd7fc649f6341cbc4840ae",
+      "changedFeatures": [
+        "compile"
+      ],
+      "notes": [
+        "Every published profile keeps this one; it is what tjs app compile builds on."
+      ]
+    },
+    {
+      "id": "app",
+      "label": "app command",
+      "category": "cli",
+      "setting": "__TJS_APP__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093744,
+      "deltaBytes": 224,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5397281,
+      "deltaLinkedBytes": 3328,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "2191330d53159957c0583a81d71f6594929f85214e52e0e02cc3f277bf6d3594",
+      "changedFeatures": [
+        "app"
+      ],
+      "notes": []
+    },
+    {
+      "id": "help",
+      "label": "help text",
+      "category": "cli",
+      "setting": "__TJS_HELP__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093776,
+      "deltaBytes": 192,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5399713,
+      "deltaLinkedBytes": 896,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "227582d8fe3af73e27799746d07db08d0826ab1630ac7fb62aaef3c9d2110091",
+      "changedFeatures": [
+        "help"
+      ],
+      "notes": []
+    },
+    {
+      "id": "tls-ca",
+      "label": "--tls-ca option",
+      "category": "cli",
+      "setting": "__TJS_TLS_CA__=false",
+      "onBytes": 6093968,
+      "offBytes": 6093872,
+      "deltaBytes": 96,
+      "onLinkedBytes": 5400609,
+      "offLinkedBytes": 5400481,
+      "deltaLinkedBytes": 128,
+      "onSha256": "0d04baece66946cccd32640860fc0f6f99467ff453f95c526b30755fadd46f79",
+      "offSha256": "30bf3e824914691129bcf29445e4f72bf25edd4d62ea1e4d8e3a6da7e02f1b2d",
+      "changedFeatures": [
+        "tls-ca"
+      ],
+      "notes": [
+        "Measured with TLS on; on a non-TLS build it is forced off anyway."
+      ]
+    }
+  ]
+}

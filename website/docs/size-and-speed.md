@@ -31,17 +31,31 @@ prebuilt; [Slim builds](./slim-builds.md) documents every option.
 <ReleaseSizeChart />
 
 The chart reads committed records generated from published ZIP files. It never rebuilds an old tag
-or fetches GitHub while this site is building. `slim-v26.6.0-7` predates two alternative codegen
-profiles, so `balanced-min` and `tuned-min` begin at `slim-v26.6.0-8`; that gap is intentional,
-never zero bytes.
+or fetches GitHub while this site is building. The matrix has grown over time and the chart shows
+that honestly: `slim-v26.6.0-6` shipped four profiles, `-7` six, `-8` eight. A profile that did not
+exist yet is a gap, never zero bytes.
 
 ## What each feature costs
 
 <FeatureCostChart />
 
-Feature costs are paired differences on one platform and release. They are not additive: TLS and
-WebCrypto share mbedTLS, and linker dead-code elimination changes neighboring code. That is why this
-page uses delta bars rather than a Sankey diagram.
+Each bar is one pair of builds that differ by a single switch, from a baseline with every feature
+on. The study platform is macOS arm64, where Apple clang supports every size lever this fork has.
+Use the selector to compare it against the deltas derived from released profiles, which cover fewer
+features but exist for all four platforms.
+
+**The bars are linked code and data, not file size.** Executable file size is quantized: Mach-O
+pads segments to a 16 KB page, so a feature worth a few kilobytes may not move the download at
+all — the test-runner subcommand costs 5,952 linked bytes, and removing it makes the file *128
+bytes bigger*.
+The exact-values table under the chart shows both numbers side by side.
+
+**The bars cannot be summed.** TLS cannot be removed without the bundled CA and `--tls-ca` going
+with it, so its bar contains all three. WebCrypto measured with TLS on is worth 55,144 B, because
+`libmbedcrypto` stays linked for TLS either way — on a no-TLS build the same flag is worth
+182,560 B. Linker dead-code elimination moves bytes between neighbours too. A Sankey diagram would
+have to assign that shared code to one arm and would invite exactly the addition that does not
+hold, which is why this page uses delta bars.
 
 Sizes from the `BUILDINFO.txt` inside each published artifact of **`slim-v26.6.0-8`**
 (commit `1274e5e7`, 2026-08-24), **linux-x86_64**, unpacked binary, stripped. The toolchain is
